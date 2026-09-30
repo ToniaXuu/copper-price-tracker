@@ -2,7 +2,7 @@
 //
 // ⚠️ 分工是有意为之，别把两者换回来：
 //   静态资源（页面/图标/echarts）→ 缓存优先，秒开
-//   data.json（每天被 Actions 改写）→ **网络优先**，否则永远慢一个版本
+//   会变的文件（data.json / releases.json）→ **网络优先**，否则永远慢一个版本
 // 历史坑（沿用油价项目实测结论）：data.json 若走「预缓存 + 缓存优先」，
 // 返回访客每次都会先看到昨天的数据 —— 页面上表现为「今天的新价格不见了」，
 // 必须刷第二次才出来。
@@ -11,10 +11,14 @@
 //
 // ⚠️ 本项目 data.json 约 1 MB（含 20 年日线 + LME 历史），所以**不放进 CORE_ASSETS 预缓存**，
 // 只在用户真正访问时按需缓存，避免安装阶段白白下载 1 MB。
-const CACHE_NAME = 'copper-price-tracker-v1';
+//
+// v2：新增 releases.json（同为网络优先）；并注意 —— 改动 index.html 后必须升版本号，
+// 因为页面本身走缓存优先，不升版本老访客会一直拿到旧页面。
+const CACHE_NAME = 'copper-price-tracker-v3';
 const CORE_ASSETS = [
   './',
   './index.html',
+  './releases.html',
   './manifest.json',
   './favicon.png',
   './icon-192x192.png',
@@ -22,7 +26,11 @@ const CORE_ASSETS = [
   'https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js',
 ];
 
-const DATA_FILE = 'data.json';
+// 会变的文件一律走「网络优先」，绝不放预缓存：
+//   data.json     —— 每天 08:30 被 Actions 重写
+//   releases.json —— 每次发版更新
+// 放在这里而不是 CORE_ASSETS，是为了避免安装阶段就下载 1 MB 的 data.json。
+const NETWORK_FIRST = ['data.json', 'releases.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -53,7 +61,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   // ---- 数据文件：网络优先，断网才回退缓存 ----
-  if (url.pathname.endsWith('/' + DATA_FILE)) {
+  if (NETWORK_FIRST.some((f) => url.pathname.endsWith('/' + f))) {
     event.respondWith(
       fetch(event.request)
         .then((response) => {

@@ -708,6 +708,128 @@ def main() -> int:
                     wn(e[:220])
                 else:
                     no(f"运行时报错：{e[:220]}")
+
+        # ---------------- I 版本发布记录页 ----------------
+        # 独立页面 + 独立数据源（releases.json）。核心口径是「同一天多版本合并成一个节点」
+        # 与「节点内按时刻倒序」—— 这两条错了页面就白做，所以重点验它们。
+        print("\n== I. 版本发布记录页（releases.html） ==")
+        cdp.call("Page.navigate", {"url": base + "releases.html"})
+        rendered = False
+        repl_deadline = time.time() + 30
+        while time.time() < repl_deadline:
+            try:
+                n = cdp.js("document.querySelectorAll('#releaseTimeline .tl-entry').length")
+                if n and int(n) > 0:
+                    rendered = True
+                    break
+            except Exception:
+                pass
+            time.sleep(0.4)
+        print(f"  渲染等待：{'已渲染' if rendered else '超时（继续取值）'}")
+        time.sleep(0.9)
+
+        r = json.loads(cdp.js(r"""JSON.stringify({
+          days: document.querySelectorAll('#releaseTimeline .tl-day').length,
+          entries: document.querySelectorAll('#releaseTimeline .tl-entry').length,
+          times: [].map.call(document.querySelectorAll('#releaseTimeline .tl-time'), function(e){return e.textContent.trim();}),
+          vers: [].map.call(document.querySelectorAll('#releaseTimeline .tl-ver'), function(e){return e.textContent.trim();}),
+          counts: [].map.call(document.querySelectorAll('#releaseTimeline .tl-count'), function(e){return e.textContent.trim();}),
+          nows: document.querySelectorAll('#releaseTimeline .tl-now').length,
+          nowVer: (function(){var n=document.querySelector('#releaseTimeline .tl-now');if(!n)return '';var v=n.parentElement.querySelector('.tl-ver');return v?v.textContent.trim():'';})(),
+          cur: (document.getElementById('relCurrent')||{}).textContent,
+          total: (document.getElementById('relTotal')||{}).textContent,
+          footTotal: (document.getElementById('footTotal')||{}).textContent,
+          bootDisplay: getComputedStyle(document.getElementById('bootScreen')).display,
+          backHref: (document.querySelector('.rel-back')||{}).getAttribute ? document.querySelector('.rel-back').getAttribute('href') : '',
+          backCount: document.querySelectorAll('a[href="./index.html"]').length,
+          scrollW: document.documentElement.scrollWidth,
+          innerW: window.innerWidth
+        })"""))
+        print(f"  节点 {r['days']} 个 / 条目 {r['entries']} 个 · 节点徽标 {r['counts']}")
+        print(f"  时刻顺序 {r['times']} · 版本顺序 {r['vers']}")
+
+        # I1 同日合并：releases.json 里 3 条同日期版本 → 只该有 1 个日期节点
+        if r["days"] == 1 and r["entries"] == 3:
+            ok("同一天的 3 个版本合并为 1 个日期节点（合并生效）")
+        else:
+            no(f"同日合并异常：节点 {r['days']} 个 / 条目 {r['entries']} 个（期望 1 / 3）")
+
+        # I2 节点内按时刻倒序，且精确到分钟
+        want_times = ["11:45", "10:20", "10:01"]
+        if r["times"] == want_times:
+            ok(f"节点内按时刻倒序：{' > '.join(want_times)}（精确到分钟，非仅日期）")
+        else:
+            no(f"时刻顺序异常：{r['times']}（期望 {want_times}）")
+
+        # I3 版本号与时刻同序（倒序展开）
+        want_vers = ["v1.1.0", "v1.0.1", "v1.0.0"]
+        if r["vers"] == want_vers:
+            ok(f"版本号与时刻同序：{' > '.join(want_vers)}")
+        else:
+            no(f"版本号顺序异常：{r['vers']}（期望 {want_vers}）")
+
+        # I4 「最新」徽标唯一且指向时刻最大的那条
+        if r["nows"] == 1 and r["nowVer"] == "v1.1.0":
+            ok("「最新」徽标唯一，且落在 11:45 的 v1.1.0 上")
+        else:
+            no(f"最新徽标异常：数量 {r['nows']} / 指向 {r['nowVer']!r}")
+
+        # I5 顶部统计与页脚口径一致
+        if r["cur"] == "v1.1.0" and "3" in (r["total"] or "") and (r["footTotal"] or "").strip() == "3":
+            ok(f"统计一致：当前 {r['cur']} / 总数 {r['total']} / 页脚 {r['footTotal']}")
+        else:
+            no(f"统计异常：当前 {r['cur']!r} 总数 {r['total']!r} 页脚 {r['footTotal']!r}")
+
+        # I6 首屏加载遮罩必须退场（否则整页不可用）
+        if r["bootDisplay"] == "none":
+            ok("首屏加载遮罩已退场（display:none）")
+        else:
+            no(f"加载遮罩未退场：display={r['bootDisplay']}")
+
+        # I7 回首页入口：顶栏 + 卡片底部，至少两处
+        if r["backHref"] == "./index.html" and r["backCount"] >= 2:
+            ok(f"回首页入口 href={r['backHref']}（共 {r['backCount']} 处）")
+        else:
+            no(f"回首页入口异常：href={r['backHref']!r} 数量={r['backCount']}")
+
+        # I8 无横向溢出
+        if r["scrollW"] <= r["innerW"]:
+            ok(f"1280px 视口无横向溢出（scrollW={r['scrollW']} innerW={r['innerW']}）")
+        else:
+            no(f"横向溢出：scrollW={r['scrollW']} > innerW={r['innerW']}")
+
+        # I9 主题三态在本页同样生效（背景亮度必须真的翻转）
+        def _lum(css: str) -> int:
+            m = re.findall(r"\d+", css or "")
+            if len(m) < 3:
+                return -1
+            return (int(m[0]) * 299 + int(m[1]) * 587 + int(m[2]) * 114) // 1000
+
+        cdp.js("document.documentElement.setAttribute('data-theme','dark')")
+        time.sleep(0.35)
+        dark_bg = cdp.js("getComputedStyle(document.body).backgroundColor")
+        cdp.js("document.documentElement.setAttribute('data-theme','light')")
+        time.sleep(0.35)
+        light_bg = cdp.js("getComputedStyle(document.body).backgroundColor")
+        cdp.js("document.documentElement.removeAttribute('data-theme')")
+        time.sleep(0.2)
+        d_lum, l_lum = _lum(dark_bg), _lum(light_bg)
+        if 0 <= d_lum < 60 and l_lum > 200:
+            ok(f"主题三态生效：dark 亮度 {d_lum}（{dark_bg}）/ light 亮度 {l_lum}（{light_bg}）")
+        else:
+            no(f"主题切换异常：dark={dark_bg}({d_lum}) light={light_bg}({l_lum})")
+
+        # I10 版本记录页的运行时报错
+        errs2 = json.loads(cdp.js("JSON.stringify(window.__errs||[])"))
+        if not errs2:
+            ok("版本记录页无运行时报错")
+        else:
+            for e in errs2:
+                if str(e).startswith(("warn:", "cerr:")):
+                    wn(f"releases.html: {str(e)[:200]}")
+                else:
+                    no(f"releases.html 运行时报错：{str(e)[:200]}")
+
         rc = 1 if FAIL else 0
     except Exception as exc:  # noqa: BLE001
         print(f"\n[探针异常] {type(exc).__name__}: {exc}")

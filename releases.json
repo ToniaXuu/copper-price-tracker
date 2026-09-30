@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "current": "1.1.0",
+    "updatedAt": "2026-09-30T11:15:00+08:00",
+    "note": "同一天发布的多个版本会在页面上合并为一个时间线节点，节点内按时刻倒序展开。"
+  },
+  "releases": [
+    {
+      "version": "1.1.0",
+      "date": "2026-09-30",
+      "time": "11:15",
+      "type": "feat",
+      "title": "导航锚点 · 首屏加载 · 版本记录独立成页",
+      "items": [
+        "新增吸顶页面导航锚点：随滚动高亮当前区块，点击平滑跳转，移动端横向滚动不换行",
+        "新增首屏全局加载动画：铜线圈旋转 + 不定长进度条 + 分阶段文案（连接数据源 → 渲染图表），最短展示 400ms、8 秒兜底强制退场",
+        "新增独立的版本发布记录页 releases.html：同一天发布的多个版本合并为一个日期节点，节点内按时刻倒序展开、精确到分钟",
+        "新增 releases.json 数据源，与 data.json 分离 —— 后者每天被 Actions 重写，版本记录放进去会被覆盖",
+        "Service Worker 升至 v3：releases.html 加入预缓存；releases.json 与 data.json 同走网络优先策略",
+        "verify_static.py 扩展为双页校验，并新增「index.html ↔ releases.html 设计令牌一致性」硬校验：79 个令牌逐值比对，任何漂移直接判失败",
+        "runtime_probe.py 新增版本发布记录页回归段：同日合并、时刻倒序、遮罩退场、主题三态、横向溢出"
+      ]
+    },
+    {
+      "version": "1.0.1",
+      "date": "2026-09-30",
+      "time": "10:20",
+      "type": "fix",
+      "title": "修复四个静默错误（不报错但结果错）",
+      "items": [
+        "涨跌口径自相矛盾：change 按收盘价算、主指标却是结算价，导致推送标题出现「上涨 −130」——统一为结算价口径，并新增 meta.changeBasis 自证",
+        "增量统计恒等于全量：整字典比较撞上派生字段，改为只比源字段",
+        "shiftDate 时区少一天：toISOString 取的是 UTC 日期，改用 setUTCDate 做日期算术",
+        "区间切换图表不缩放：dataZoom.startValue 对 category 轴是精确匹配，截断日期匹配失败后静默回退全量，改为对齐到真实交易日"
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "date": "2026-09-30",
+      "time": "10:01",
+      "type": "feat",
+      "title": "站点落地：数据层 / 页面层 / 推送层全链路",
+      "items": [
+        "数据层 scripts/update_copper.py：五源降级抓取（新浪 K 线 → 上期所官方 → 实时快照兜底），数据源健康登记、价格与基差偏离校验",
+        "现货与 LME：生意社两步 cookie 握手取 1# 电解铜多供应商均价，LME 铜价历史序列独立维护",
+        "页面层 index.html：三大指标卡 + OHLC 四宫格、ECharts 双 grid 走势图、涨跌四卡、年内位置条、沪伦比与基差图、换算器、历史表、数据源状态",
+        "推送层 scripts/send_notification.py：微信（Server 酱）+ 钉钉双通道，涨跌特化标题，数据源告警透传",
+        "定时任务 .github/workflows/update-copper.yml：每日 08:30 CST 抓取更新，通知步骤 if: always() 保证故障告警可送达"
+      ]
+    }
+  ]
+}

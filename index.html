@@ -950,8 +950,121 @@
     }
 
     /* ================================================================
+       BOOT SCREEN（首屏全局加载）
+       出现在任何内容之前，盖满视口。底色固定用 hero 深色 —— 不跟随主题：
+       浅色主题下若先白后深再白，反而比一直深色更晃眼。
+       ================================================================ */
+    .boot {
+      position: fixed; inset: 0; z-index: 10001;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--hero-solid);
+      transition: opacity .55s ease, visibility .55s ease;
+    }
+    /* 页面加载期间锁滚动，避免用户在遮罩下把页面滚走 */
+    html.is-booting { overflow: hidden; }
+    .boot.done { opacity: 0; visibility: hidden; pointer-events: none; }
+    .boot-inner { text-align: center; padding: 0 24px; max-width: 420px; }
+    .boot-coil { width: 88px; height: 88px; margin: 0 auto 20px; }
+    .boot-coil svg { width: 100%; height: 100%; display: block; }
+    .boot-ring {
+      /* transform-box: view-box 让百分比原点落在 viewBox 坐标系里，
+         否则 SVG 的 transform-origin 会按元素自身包围盒算，转起来是偏的 */
+      transform-box: view-box; transform-origin: 50% 50%;
+      animation: bootSpin 1.5s linear infinite;
+    }
+    @keyframes bootSpin { to { transform: rotate(360deg); } }
+    .boot-core {
+      transform-box: view-box; transform-origin: 50% 50%;
+      animation: bootPulse 1.7s ease-in-out infinite;
+    }
+    @keyframes bootPulse {
+      0%, 100% { opacity: .38; }
+      50%      { opacity: 1; }
+    }
+    .boot-title {
+      font-size: 17px; font-weight: 700; color: #fff;
+      letter-spacing: .02em; margin-bottom: 14px;
+    }
+    .boot-title .cu {
+      background: var(--brand-gradient-text);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .boot-bar {
+      width: 186px; height: 3px; margin: 0 auto 12px;
+      border-radius: 999px; background: rgba(255,255,255,.14);
+      overflow: hidden;
+    }
+    /* 不定长进度条：不谎报百分比，只表达「在动」 */
+    .boot-bar i {
+      display: block; height: 100%; width: 42%;
+      border-radius: 999px; background: var(--brand-gradient);
+      animation: bootSlide 1.25s ease-in-out infinite;
+    }
+    @keyframes bootSlide {
+      0%   { transform: translateX(-105%); }
+      100% { transform: translateX(255%); }
+    }
+    .boot-text {
+      font-size: 12.5px; color: rgba(255,255,255,.62);
+      letter-spacing: .06em;
+      transition: opacity .2s;
+    }
+
+    /* ================================================================
+       PAGE NAV（吸顶锚点导航）
+       位置紧跟 hero —— sticky 让它在滚过 hero 后自然吸附，不需要 JS 切显隐。
+       z-index 排在 theme-switch(1000) 之下、容器(4) 之上。
+       ================================================================ */
+    .page-nav {
+      position: sticky; top: 0; z-index: 900;
+      background: color-mix(in srgb, var(--bg) 86%, transparent);
+      -webkit-backdrop-filter: blur(14px) saturate(1.5);
+      backdrop-filter: blur(14px) saturate(1.5);
+      border-bottom: 1px solid var(--border);
+      transition: box-shadow .25s ease;
+    }
+    .page-nav.stuck { box-shadow: 0 6px 22px rgba(60,40,20,.10); }
+    .pn-inner {
+      max-width: 1160px; margin: 0 auto;
+      padding: 9px 20px;
+      display: flex; align-items: center; gap: 6px;
+      overflow-x: auto; overflow-y: hidden;
+      scrollbar-width: none;
+    }
+    .pn-inner::-webkit-scrollbar { height: 0; }
+    .pn-link {
+      flex: 0 0 auto;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 13px; border-radius: 999px;
+      font-size: 13px; font-weight: 600;
+      color: var(--sub); text-decoration: none;
+      white-space: nowrap; border: 1px solid transparent;
+      transition: background .22s, color .22s, border-color .22s, box-shadow .22s;
+    }
+    .pn-link .ic { width: 15px; height: 15px; color: currentColor; }
+    .pn-link:hover { color: var(--primary-strong); background: var(--primary-soft); }
+    .pn-link.active {
+      color: #fff;
+      background: var(--brand-gradient);
+      border-color: var(--ser-futures);
+      box-shadow: 0 2px 10px var(--primary-ring);
+    }
+    /* 高亮态下图标继承白色，避免铜色图标压在铜色渐变上糊成一团 */
+    .pn-link.active .ic { color: #fff; }
+
+    /* 锚点跳转时给吸顶导航留出高度，否则标题会被压在导航下面 */
+    [id^="sec-"] { scroll-margin-top: 70px; }
+
+
+    /* ================================================================
        RESPONSIVE —— 全站仅两个断点：768（平板） / 640（手机）
        ================================================================ */
+    /* 导航右侧避让固定的主题切换器（fixed top:16 right:16，约 102px 宽） */
+    @media (max-width: 1320px) {
+      .pn-inner { padding-right: 128px; }
+    }
+
     @media (max-width: 768px) {
       .data-table { font-size: 12px; }
       .data-table thead th,
@@ -981,6 +1094,12 @@
       .mini-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .quick-stats { gap: 12px; }
       .ohlc-grid .oc b { font-size: 12px; }
+      /* 导航：横滚不换行，右侧再收一点给主题切换器让位 */
+      .pn-inner { padding: 7px 14px; padding-right: 108px; gap: 5px; }
+      .pn-link { padding: 5px 11px; font-size: 12.5px; }
+      .pn-link .ic { width: 14px; height: 14px; }
+      [id^="sec-"] { scroll-margin-top: 58px; }
+      .boot-coil { width: 74px; height: 74px; }
     }
 
     /* ===== REDUCED MOTION ===== */
@@ -988,6 +1107,9 @@
       .particle, .coil-rotor, .busbar-shine { animation: none !important; }
       .reveal { opacity: 1 !important; transform: none !important; }
       .skeleton { animation: none !important; background: var(--sk-1) !important; }
+      /* 加载动画不做旋转/滑动，进度条改为完整静态条 —— 仍表达「加载中」但不闪动 */
+      .boot-ring, .boot-core, .boot-bar i { animation: none !important; }
+      .boot-bar i { width: 100%; }
       *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
       html { scroll-behavior: auto; }
     }
@@ -1067,7 +1189,7 @@
         --shadow: none !important; --shadow-sm: none !important; --shadow-lg: none !important;
         --row-hover: #fff !important; --th-bg: #f5f5f4 !important;
       }
-      .particles, .progress-bar, .back-top, .theme-switch, .table-more { display: none !important; }
+      .particles, .progress-bar, .back-top, .theme-switch, .table-more, .page-nav, .boot { display: none !important; }
       .reveal { opacity: 1 !important; transform: none !important; }
       .card, .qstat, .impact-card, .callout { break-inside: avoid; }
       .hero, footer { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -1075,6 +1197,41 @@
   </style>
 </head>
 <body>
+
+<!-- ========== 首屏全局加载 ==========
+     直接写在 body 最前面：首帧就可见，不会先闪一下空页面。
+     数据渲染完成后由 JS 加上 .done 淡出，8 秒兜底强制退出。 -->
+<div class="boot" id="bootScreen" role="status" aria-live="polite" aria-label="页面加载中">
+  <div class="boot-inner">
+    <div class="boot-coil" aria-hidden="true">
+      <svg viewBox="0 0 100 100">
+        <defs>
+          <linearGradient id="bootCu" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#f0b072" />
+            <stop offset=".5" stop-color="#c2703d" />
+            <stop offset="1" stop-color="#7a3f18" />
+          </linearGradient>
+        </defs>
+        <!-- 静态底环 -->
+        <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="2" />
+        <!-- 旋转流光段（周长 2πr≈264，虚线 66+198 正好合上） -->
+        <g class="boot-ring">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="url(#bootCu)" stroke-width="3.2"
+                  stroke-linecap="round" stroke-dasharray="66 198" />
+        </g>
+        <!-- 中心铜线圈：与 hero 的手绘线圈同源 -->
+        <g class="boot-core" fill="none" stroke="url(#bootCu)" stroke-width="2.2">
+          <ellipse cx="50" cy="50" rx="21" ry="13" />
+          <ellipse cx="50" cy="50" rx="14.5" ry="8.6" />
+          <ellipse cx="50" cy="50" rx="7.8" ry="4.4" />
+        </g>
+      </svg>
+    </div>
+    <div class="boot-title">沪铜价格趋势 · <span class="cu">采购锚点</span></div>
+    <div class="boot-bar"><i></i></div>
+    <div class="boot-text" id="bootText">正在连接数据源…</div>
+  </div>
+</div>
 
 <!-- ========== 图标库（stroke 继承 currentColor，尺寸由 .ic 控制）========== -->
 <svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -1174,6 +1331,10 @@
     <rect x="3" y="4.5" width="18" height="12" rx="2" />
     <line x1="9" y1="19.8" x2="15" y2="19.8" />
     <line x1="12" y1="16.5" x2="12" y2="19.8" />
+  </symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24">
+    <path d="M20.4 12.6 12.6 20.4a1.4 1.4 0 0 1-2 0L4.2 14a1.4 1.4 0 0 1-.4-1V4.6a1.4 1.4 0 0 1 1.4-1.4h8.4a1.4 1.4 0 0 1 1 .4l5.4 5.4a1.4 1.4 0 0 1 0 2z" />
+    <circle cx="8.2" cy="8.2" r="1.6" />
   </symbol>
 </svg>
 
@@ -1286,10 +1447,29 @@
   </div>
 </section>
 
+<!-- ========== 吸顶锚点导航 ==========
+     紧跟 hero：sticky 天然做到「滚过 hero 后吸附顶部」，无需 JS 切显隐。
+     高亮由 scroll spy 维护，见文件末尾的 initPageNav()。 -->
+<nav class="page-nav" id="pageNav" aria-label="页面导航">
+  <div class="pn-inner">
+    <a class="pn-link" href="#sec-prices"><svg class="ic" aria-hidden="true"><use href="#i-coil" /></svg>行情总览</a>
+    <a class="pn-link" href="#sec-changes"><svg class="ic" aria-hidden="true"><use href="#i-arrow-up" /></svg>涨跌概览</a>
+    <a class="pn-link" href="#sec-trend"><svg class="ic" aria-hidden="true"><use href="#i-trend" /></svg>价格走势</a>
+    <a class="pn-link" href="#sec-position"><svg class="ic" aria-hidden="true"><use href="#i-scale" /></svg>年内位置</a>
+    <a class="pn-link" href="#sec-cross"><svg class="ic" aria-hidden="true"><use href="#i-globe" /></svg>内外盘</a>
+    <a class="pn-link" href="#sec-converter"><svg class="ic" aria-hidden="true"><use href="#i-ruler" /></svg>换算工具</a>
+    <a class="pn-link" href="#sec-impact"><svg class="ic" aria-hidden="true"><use href="#i-factory" /></svg>用铜影响</a>
+    <a class="pn-link" href="#sec-history"><svg class="ic" aria-hidden="true"><use href="#i-list" /></svg>历史数据</a>
+    <a class="pn-link" href="#sec-health"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>数据源</a>
+    <!-- 版本记录是独立页面，不是页内锚点：跳转而非滚动，故不参与 scroll spy -->
+    <a class="pn-link" href="./releases.html"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg>版本记录</a>
+  </div>
+</nav>
+
 <div class="container">
 
   <!-- ========== 当前铜价（P-1）========== -->
-  <div class="reveal">
+  <div class="reveal" id="sec-prices">
     <div class="price-head">
       <div class="section-title" id="currentPriceTitle">
         <svg class="ic" aria-hidden="true"><use href="#i-coil" /></svg><span id="currentPriceText">铜价加载中…</span>
@@ -1327,7 +1507,7 @@
   </div>
 
   <!-- ========== 涨跌指示（P-2）========== -->
-  <div class="quick-stats reveal">
+  <div class="quick-stats reveal" id="sec-changes">
     <div class="qstat" id="statDodCard">
       <div class="label">沪铜结算价 · 较前一交易日</div>
       <div class="value"><span class="counter" id="statDod" data-target="0" data-prefix="" data-suffix="">0</span></div>
@@ -1351,7 +1531,7 @@
   </div>
 
   <!-- ========== 价格走势（P-3）========== -->
-  <div class="card reveal">
+  <div class="card reveal" id="sec-trend">
     <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-trend" /></svg>沪铜价格走势<span class="title-tag">元/吨</span></div>
     <div class="range-bar">
       <div class="range-group" id="rangeGroup" role="group" aria-label="图表周期">
@@ -1373,7 +1553,7 @@
   </div>
 
   <!-- ========== 年内位置 + 连续涨跌（P-4 / P-5）========== -->
-  <div class="card reveal">
+  <div class="card reveal" id="sec-position">
     <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-scale" /></svg><span id="posTitle">年内区间位置</span><span class="title-tag">结算价口径</span></div>
     <div class="pos-track">
       <div class="pos-fill" id="posFill" style="width:0%"></div>
@@ -1410,7 +1590,7 @@
   </div>
 
   <!-- ========== 沪伦比 & 现货基差（P-7）========== -->
-  <div class="card reveal">
+  <div class="card reveal" id="sec-cross">
     <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-globe" /></svg>内外盘信号<span class="title-tag">沪伦比 · 基差</span></div>
     <div class="callout">
       <div class="callout-icon"><svg class="ic" aria-hidden="true"><use href="#i-bulb" /></svg></div>
@@ -1434,7 +1614,7 @@
   </div>
 
   <!-- ========== 换算器 + 用铜成本（P-6 / P-8）========== -->
-  <div class="card reveal">
+  <div class="card reveal" id="sec-converter">
     <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-ruler" /></svg>报价换算工具<span class="title-tag">按沪铜结算价</span></div>
     <div class="conv-grid">
       <div>
@@ -1488,7 +1668,7 @@
   </div>
 
   <!-- ========== 对业务的影响 ========== -->
-  <div class="section-title reveal"><svg class="ic" aria-hidden="true"><use href="#i-factory" /></svg>铜价波动的实际影响</div>
+  <div class="section-title reveal" id="sec-impact"><svg class="ic" aria-hidden="true"><use href="#i-factory" /></svg>铜价波动的实际影响</div>
   <div class="impact-grid">
     <div class="impact-card n1 reveal">
       <div class="ic-icon"><svg class="ic" aria-hidden="true"><use href="#i-cable" /></svg></div>
@@ -1546,7 +1726,7 @@
   </div>
 
   <!-- ========== 历史数据表 ========== -->
-  <div class="card reveal">
+  <div class="card reveal" id="sec-history">
     <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-list" /></svg><span id="tableSectionText">历史交易日数据</span></div>
     <div class="tbl-wrap">
       <table class="data-table">
@@ -1571,7 +1751,7 @@
   </div>
 
   <!-- ========== 数据源状态 ========== -->
-  <div class="card reveal">
+  <div class="card reveal" id="sec-health">
     <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>数据源状态<span class="title-tag" id="healthTag">—</span></div>
     <div class="src-grid" id="srcGrid"></div>
     <div class="conv-note" id="metaNotes"></div>
@@ -1588,6 +1768,7 @@
   <p style="margin-top:6px">
     <svg class="ic ic-sm" aria-hidden="true"><use href="#i-pin" /></svg>指标口径：沪铜连续合约结算价 · 现货为 1# 电解铜多供应商均价
     &nbsp;|&nbsp; 更新至 <span id="updateDate"></span>
+    &nbsp;|&nbsp; <a href="./releases.html">版本记录</a>
     &nbsp;|&nbsp; <a href="https://github.com/ToniaXuu" target="_blank" rel="noopener">@ToniaXuu</a>
   </p>
 </footer>
@@ -1637,6 +1818,94 @@ window.addEventListener('scroll', () => {
     });
   }
 }, { passive: true });
+
+// ============ 首屏加载遮罩 ============
+// 遮罩在 HTML 里就是可见的（保证首帧不闪空页面），这里只负责推进文案与收尾。
+// 两个时间常量：MIN 避免本地秒开时闪一下反而更晃眼；
+// MAX 是兜底 —— 任何异常（脚本崩、网络悬挂）都不能把用户关在遮罩里。
+const bootEl = document.getElementById('bootScreen');
+const bootTextEl = document.getElementById('bootText');
+const BOOT_MIN_MS = 400;
+const BOOT_MAX_MS = 8000;
+const bootStartAt = Date.now();
+let bootDone = false;
+
+function bootStage(text) {
+  if (bootTextEl && text) bootTextEl.textContent = text;
+}
+
+function hideBoot() {
+  if (bootDone) return;
+  bootDone = true;
+  const wait = Math.max(0, BOOT_MIN_MS - (Date.now() - bootStartAt));
+  setTimeout(() => {
+    if (bootEl) {
+      bootEl.classList.add('done');
+      // 过渡结束再从布局里摘掉。用 style 而不是 hidden 属性：
+      // .boot{display:flex} 的优先级高于 UA 的 [hidden]{display:none}，hidden 不生效。
+      setTimeout(() => { bootEl.style.display = 'none'; }, 600);
+    }
+    document.documentElement.classList.remove('is-booting');
+  }, wait);
+}
+
+// 立刻锁滚动：脚本执行到 body 末尾时用户还来不及滚动，且遮罩铺满视口，视觉无感。
+document.documentElement.classList.add('is-booting');
+setTimeout(hideBoot, BOOT_MAX_MS);
+
+// ============ 吸顶导航（当前区块高亮 + 吸附阴影）============
+function initPageNav() {
+  const nav = document.getElementById('pageNav');
+  if (!nav) return;
+  const inner = nav.querySelector('.pn-inner');
+  const links = Array.prototype.slice.call(nav.querySelectorAll('.pn-link'));
+  // 只保留锚点真实存在的链接，避免出现点了没反应的死链
+  const targets = links.map((a) => {
+    const el = document.getElementById(String(a.getAttribute('href') || '').slice(1));
+    return el ? { link: a, el: el } : null;
+  }).filter(Boolean);
+  if (!targets.length) return;
+
+  let activeLink = null;
+  let navScrollPending = false;
+
+  function update() {
+    const navH = nav.offsetHeight || 54;
+    const line = navH + 24; // 判定线取导航底边再往下一点，避免标题刚露头就跳高亮
+
+    let current = targets[0];
+    for (let i = 0; i < targets.length; i++) {
+      // 必须用 getBoundingClientRect：offsetTop 是相对 offsetParent（.container 带
+      // position:relative）算的，直接与滚动量比较会整体偏掉。
+      if (targets[i].el.getBoundingClientRect().top - line <= 0) current = targets[i];
+    }
+
+    if (current.link !== activeLink) {
+      links.forEach((a) => a.classList.toggle('active', a === current.link));
+      activeLink = current.link;
+      // 让激活项滚进导航可视区。不能用 scrollIntoView —— 那会把整个页面一起滚走；
+      // 这里只调整 .pn-inner 自身的横向偏移，且用 rect 差值算，不依赖 offsetParent。
+      if (inner && inner.scrollWidth > inner.clientWidth + 2) {
+        const ir = inner.getBoundingClientRect();
+        const lr = current.link.getBoundingClientRect();
+        const delta = (lr.left - ir.left) - (ir.width - lr.width) / 2;
+        inner.scrollTo({ left: Math.max(0, inner.scrollLeft + delta), behavior: 'smooth' });
+      }
+    }
+
+    // sticky 元素一旦吸附，到视口顶部的距离就是 0
+    nav.classList.toggle('stuck', nav.getBoundingClientRect().top <= 1);
+  }
+
+  window.addEventListener('scroll', () => {
+    if (navScrollPending) return;
+    navScrollPending = true;
+    requestAnimationFrame(() => { update(); navScrollPending = false; });
+  }, { passive: true });
+  window.addEventListener('resize', update, { passive: true });
+
+  update();
+}
 
 // ============ Scroll Reveal Observer ============
 const revealObserver = new IntersectionObserver((entries) => {
@@ -1780,6 +2049,8 @@ async function init() {
     raw = FALLBACK_DATA;
     dataLoadFailed = true;
   }
+
+  bootStage('正在渲染图表…');
 
   DATA = raw;
   META = raw.meta || {};
@@ -2876,11 +3147,20 @@ document.getElementById('tableMore').addEventListener('click', function () {
 });
 
 // ============ 启动 ============
+function bootRun() {
+  // init 内部任何异常都不该把加载遮罩留在屏幕上 —— finally 统一收尾，
+  // 另有 BOOT_MAX_MS 兜底，双保险。
+  Promise.resolve()
+    .then(init)
+    .catch((err) => { console.error('初始化失败:', err); })
+    .finally(() => { hideBoot(); initPageNav(); });
+}
+
 // 等 DOMContentLoaded 确保 defer 脚本（ECharts CDN）已就绪
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded', bootRun);
 } else {
-  init();
+  bootRun();
 }
 
 // ============ PWA Service Worker ============

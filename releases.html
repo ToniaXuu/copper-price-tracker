@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>版本发布记录 · 沪铜价格趋势</title>
+  <meta name="description" content="沪铜价格趋势站的版本发布记录：每次发布的时间、版本号与变更明细。同一天发布的多个版本合并为一个日期节点，节点内按时刻倒序展开。" />
+  <meta property="og:title" content="版本发布记录 · 沪铜价格趋势" />
+  <meta property="og:description" content="每次发布的时间、版本号与变更明细，同一天多版本合并展示。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://ToniaXuu.github.io/copper-price-tracker/releases.html" />
+  <meta name="theme-color" content="#0a0f1e" />
+  <meta name="color-scheme" content="dark light" />
+  <link rel="icon" href="./favicon.png" type="image/png" />
+  <script>
+    /* 主题预置：在任何绘制前落盘 data-theme，避免闪白/闪黑。
+       优先级：URL ?theme= > localStorage > 跟随系统 */
+    (function () {
+      try {
+        var q = new URLSearchParams(location.search).get('theme');
+        var saved = q || localStorage.getItem('cpt-theme') || 'auto';
+        if (['light', 'dark', 'auto'].indexOf(saved) < 0) saved = 'auto';
+        if (saved !== 'auto') document.documentElement.setAttribute('data-theme', saved);
+      } catch (e) { /* 隐私模式忽略 */ }
+    })();
+  </script>
+  <style>
+    /* ================================================================
+       设计令牌层 —— ⚠️ 与 index.html 的 :root 必须逐字一致。
+       两页共用一套皮肤，令牌是唯一真源；verify_static.py 会做一致性校验，
+       漂移会被直接判失败。改配色时两个文件一起改。
+       ================================================================ */
+    :root {
+      color-scheme: light;
+
+      /* ---- 基础面 ---- */
+      --bg: #f5f2ee;
+      --card: #ffffff;
+      --border: #e8e2da;
+      --text: #1c1917;
+      --sub: #78716c;
+
+      /* ---- 品牌（铜）---- */
+      --brand-1: #e0924f;
+      --brand-2: #a85a22;
+      --brand-gradient: linear-gradient(90deg, var(--brand-1), var(--brand-2));
+      --brand-gradient-text: linear-gradient(135deg, #f3b877, #d9803a);
+      --blue: #3b82f6;
+      --blue-strong: #2563eb;
+      --purple: #8b5cf6;
+
+      /* ---- 语义填充（涨红跌绿 —— 国内惯例）---- */
+      --red: #ef4444;
+      --red-light: #fee2e2;
+      --green: #10b981;
+      --green-light: #d1fae5;
+      --amber: #f59e0b;
+      --amber-light: #fef3c7;
+
+      /* ---- 语义文字（保证 4.5:1 对比度）---- */
+      --up-text: #c92a2a;
+      --down-text: #047857;
+      --flat-text: #b45309;
+      --accent-text: #a85a22;
+      --flat-fg: #92400e;
+
+      /* ---- 数据系列色（图表 + 指标卡边框同源）----
+         沪铜连续是主指标，独占高饱和铜色；现货/LME 作对照，压低饱和避免抢视觉。 */
+      --ser-futures: #c2703d;
+      --ser-spot: #0d9488;
+      --ser-lme: #4f6bed;
+      --ser-ratio: #8b5cf6;
+      --ser-basis: #d97706;
+      --ser-vol: #cbd5e1;
+
+      /* ---- 主指标强调色（沪铜连续）---- */
+      --primary: var(--ser-futures);
+      --primary-strong: #a85a22;
+      --primary-soft: #fdf3e9;
+      --primary-ring: color-mix(in srgb, var(--ser-futures) 25%, transparent);
+      --primary-glow: color-mix(in srgb, var(--ser-futures) 18%, transparent);
+      --primary-card-bg: linear-gradient(160deg, #fef8f2 0%, var(--card) 62%);
+
+      /* ---- 结构性表面 ---- */
+      --th-bg: #faf8f6;
+      --row-border: #f4f0eb;
+      --row-hover: #fdf8f3;
+      --scroll-thumb: #cbd5e1;
+      --sk-1: #e7e2dc;
+      --sk-2: #f3f0ec;
+      --dot-ring: #ffffff;
+      --tl-line-a: #c2703d;
+      --tl-line-b: #e8e2da;
+      --callout-bg: linear-gradient(135deg, #fdf4ea, #fdf8f2);
+      --callout-border: #f0d6b8;
+      --input-bg: #ffffff;
+      --input-border: #ddd5cb;
+      --chip-bg: #f7f3ee;
+
+      /* ---- Hero 与 Footer（恒定深底，不随主题翻转）---- */
+      --hero-bg: linear-gradient(135deg, #0a0f1e 0%, #171226 34%, #2a1a0d 68%, #0f172a 100%);
+      --hero-solid: #0a0f1e;
+      --hero-up: #f87171;
+      --hero-down: #4ade80;
+      --hero-amber: #fbbf24;
+      --hero-copper: #e8a56b;
+      --hero-text-dim: rgba(255,255,255,.55);
+      --footer-text: rgba(255,255,255,.6);
+      /* 压暗遮罩：两端重、中间轻（文字压在中间），底部收一道过渡接住内容区 */
+      --hero-scrim:
+        linear-gradient(180deg,
+          rgba(6,10,22,.66) 0%,
+          rgba(6,10,22,.30) 24%,
+          rgba(6,10,22,.22) 48%,
+          rgba(6,10,22,.52) 74%,
+          rgba(6,10,22,.90) 100%),
+        radial-gradient(ellipse 80% 64% at 50% 42%,
+          rgba(6,10,22,.52) 0%, rgba(6,10,22,.28) 55%, rgba(6,10,22,.04) 100%);
+
+      /* ---- 悬浮控件（固定压在半透明深底上，两主题共用一套亮色）---- */
+      --toggle-bg: rgba(15,23,42,.55);
+      --toggle-bg-hover: rgba(15,23,42,.78);
+      --toggle-border: rgba(255,255,255,.3);
+      --toggle-fg: #ffffff;
+
+      /* ---- 阴影 / 圆角 / 动效 ---- */
+      --shadow-sm: 0 1px 3px rgba(60,40,20,.07);
+      --shadow: 0 4px 24px rgba(60,40,20,.09);
+      --shadow-lg: 0 12px 40px rgba(60,40,20,.13);
+      --radius: 18px;
+      --radius-sm: 10px;
+      --transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+
+      /* ---- 图表（由 JS 读取，CSS 是唯一真源）---- */
+      --chart-axis-label: #78716c;
+      --chart-axis-line: #e8e2da;
+      --chart-split-line: #f4f0eb;
+      --chart-zoom-bg: #f0ebe5;
+      --chart-zoom-fill: rgba(194,112,61,.18);
+      --chart-area-from: rgba(194,112,61,.16);
+      --chart-area-to: rgba(194,112,61,0);
+      --chart-tooltip-bg: rgba(28,22,16,.95);
+      --chart-tooltip-border: transparent;
+      --chart-tooltip-fg: #ffffff;
+      --chart-icon: #78716c;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* ===== SCROLLBAR ===== */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
+
+    /* ===== ICON SYSTEM ===== */
+    .ic {
+      width: 20px; height: 20px; flex: 0 0 auto;
+      fill: none; stroke: currentColor;
+      stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+      color: var(--ser-futures);
+    }
+    .ic-sm { width: 16px; height: 16px; }
+
+    /* ================================================================
+       BOOT SCREEN（首屏全局加载）
+       与首页同一套观感：底色固定 hero 深色，不跟随主题。
+       ================================================================ */
+    .boot {
+      position: fixed; inset: 0; z-index: 10001;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--hero-solid);
+      transition: opacity .55s ease, visibility .55s ease;
+    }
+    html.is-booting { overflow: hidden; }
+    .boot.done { opacity: 0; visibility: hidden; pointer-events: none; }
+    .boot-inner { text-align: center; padding: 0 24px; max-width: 420px; }
+    .boot-coil { width: 88px; height: 88px; margin: 0 auto 20px; }
+    .boot-coil svg { width: 100%; height: 100%; display: block; }
+    .boot-ring {
+      transform-box: view-box; transform-origin: 50% 50%;
+      animation: bootSpin 1.5s linear infinite;
+    }
+    @keyframes bootSpin { to { transform: rotate(360deg); } }
+    .boot-core {
+      transform-box: view-box; transform-origin: 50% 50%;
+      animation: bootPulse 1.7s ease-in-out infinite;
+    }
+    @keyframes bootPulse {
+      0%, 100% { opacity: .38; }
+      50%      { opacity: 1; }
+    }
+    .boot-title { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: .02em; margin-bottom: 14px; }
+    .boot-title .cu {
+      background: var(--brand-gradient-text);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .boot-bar {
+      width: 186px; height: 3px; margin: 0 auto 12px;
+      border-radius: 999px; background: rgba(255,255,255,.14); overflow: hidden;
+    }
+    .boot-bar i {
+      display: block; height: 100%; width: 42%;
+      border-radius: 999px; background: var(--brand-gradient);
+      animation: bootSlide 1.25s ease-in-out infinite;
+    }
+    @keyframes bootSlide {
+      0%   { transform: translateX(-105%); }
+      100% { transform: translateX(255%); }
+    }
+    .boot-text { font-size: 12.5px; color: rgba(255,255,255,.62); letter-spacing: .06em; }
+
+    /* ===== THEME SWITCH（三选一分段控件）===== */
+    .theme-switch {
+      position: fixed; top: 16px; right: 16px; z-index: 1000;
+      display: flex; align-items: center; gap: 2px;
+      padding: 3px; border-radius: 999px;
+      background: var(--toggle-bg);
+      border: 1px solid var(--toggle-border);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+    }
+    .ts-btn {
+      width: 30px; height: 30px; flex: 0 0 auto;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0; border: none; border-radius: 999px;
+      background: transparent; color: var(--toggle-fg);
+      opacity: .6; cursor: pointer;
+      transition: background .22s, color .22s, opacity .22s, transform .18s;
+    }
+    .ts-btn .ic { width: 17px; height: 17px; color: inherit; }
+    .ts-btn:hover { opacity: 1; background: var(--toggle-bg-hover); }
+    .ts-btn[aria-pressed="true"] { opacity: 1; background: var(--toggle-fg); color: var(--hero-solid); }
+    .ts-btn[aria-pressed="true"]:hover { background: var(--toggle-fg); }
+    .ts-btn:active { transform: scale(.9); }
+    .ts-btn:focus-visible { outline: 2px solid var(--toggle-fg); outline-offset: -2px; }
+
+    /* ===== FOCUS ===== */
+    :focus-visible { outline: 2px solid var(--ser-futures); outline-offset: 2px; }
+    .rel-hero :focus-visible { outline-color: #f3b877; }
+
+    /* ===== BACK TO TOP ===== */
+    .back-top {
+      position: fixed; bottom: 28px; right: 28px; z-index: 999;
+      width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--ser-futures); color: #fff; border: none; cursor: pointer;
+      box-shadow: 0 4px 16px color-mix(in srgb, var(--ser-futures) 40%, transparent);
+      opacity: 0; transform: translateY(20px);
+      transition: opacity .35s, transform .35s, background .2s;
+      pointer-events: none;
+    }
+    .back-top .ic { width: 20px; height: 20px; color: #fff; }
+    .back-top.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .back-top:hover { background: var(--primary-strong); }
+
+    /* ===== 顶栏（返回首页 + 页名）=====
+       吸顶；右侧留白避让固定的主题切换器。 */
+    .rel-head {
+      position: sticky; top: 0; z-index: 900;
+      background: color-mix(in srgb, var(--bg) 86%, transparent);
+      -webkit-backdrop-filter: blur(14px) saturate(1.5);
+      backdrop-filter: blur(14px) saturate(1.5);
+      border-bottom: 1px solid var(--border);
+    }
+    .rel-head-inner {
+      max-width: 1160px; margin: 0 auto;
+      padding: 10px 20px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .rel-back {
+      flex: 0 0 auto;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 13px 6px 10px; border-radius: 999px;
+      font-size: 13px; font-weight: 600;
+      color: var(--sub); text-decoration: none;
+      border: 1px solid var(--border);
+      background: var(--card);
+      transition: background .22s, color .22s, border-color .22s, transform .18s;
+    }
+    .rel-back .ic { width: 15px; height: 15px; color: currentColor; }
+    .rel-back:hover {
+      color: var(--primary-strong);
+      border-color: color-mix(in srgb, var(--ser-futures) 40%, transparent);
+      background: var(--primary-soft);
+      transform: translateX(-2px);
+    }
+    .rel-head-title {
+      font-size: 14px; font-weight: 700; color: var(--text);
+      display: inline-flex; align-items: center; gap: 7px;
+    }
+    .rel-head-title .ic { width: 16px; height: 16px; }
+    @media (max-width: 1320px) {
+      .rel-head-inner { padding-right: 126px; }
+    }
+
+    /* ===== 页头（紧凑版 hero，与首页同一深底家族）===== */
+    .rel-hero {
+      position: relative;
+      background: var(--hero-bg);
+      padding: 52px 20px 46px;
+      overflow: hidden;
+    }
+    .rel-hero::after {
+      content: ''; position: absolute; inset: 0; z-index: 1;
+      background: var(--hero-scrim);
+    }
+    .rel-hero-glow {
+      position: absolute; inset: 0; z-index: 0;
+      background:
+        radial-gradient(circle at 16% 26%, color-mix(in srgb, var(--ser-futures) 26%, transparent) 0%, transparent 56%),
+        radial-gradient(circle at 84% 74%, rgba(79,107,237,.16) 0%, transparent 52%);
+      animation: relGlow 9s ease-in-out infinite alternate;
+    }
+    @keyframes relGlow {
+      0%   { opacity: 0.78; }
+      100% { opacity: 1; }
+    }
+    .rel-hero-inner { position: relative; z-index: 2; max-width: 1160px; margin: 0 auto; }
+    .rel-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 999px;
+      padding: 5px 16px; font-size: 12px; letter-spacing: .05em;
+      color: rgba(255,255,255,.7);
+      backdrop-filter: blur(8px);
+      margin-bottom: 18px;
+    }
+    .rel-badge .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 60%, transparent); }
+      50%     { box-shadow: 0 0 0 8px color-mix(in srgb, var(--green) 0%, transparent); }
+    }
+    .rel-hero h1 {
+      font-size: clamp(24px, 4vw, 40px);
+      font-weight: 800; color: #fff; line-height: 1.18;
+      letter-spacing: -.02em; margin-bottom: 14px;
+      text-shadow: 0 2px 18px rgba(4,8,18,.78), 0 1px 3px rgba(4,8,18,.6);
+    }
+    .rel-hero h1 .cu {
+      background: var(--brand-gradient-text);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .rel-hero p {
+      font-size: 14.5px; color: rgba(255,255,255,.8);
+      max-width: 640px; margin-bottom: 30px;
+      text-shadow: 0 1px 10px rgba(4,8,18,.72);
+    }
+    .rel-stats { display: flex; flex-wrap: wrap; gap: 14px; }
+    .rel-stat {
+      flex: 1 1 168px; min-width: 0;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.13);
+      border-radius: var(--radius-sm);
+      padding: 14px 18px;
+      backdrop-filter: blur(8px);
+    }
+    .rel-stat.is-primary {
+      background: linear-gradient(160deg, color-mix(in srgb, var(--ser-futures) 20%, transparent), rgba(255,255,255,.05));
+      border-color: color-mix(in srgb, var(--ser-futures) 46%, transparent);
+    }
+    .rel-stat .val {
+      font-size: 24px; font-weight: 800; color: #fff;
+      line-height: 1.2; font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+      letter-spacing: -.01em;
+    }
+    .rel-stat.is-primary .val { color: var(--hero-copper); }
+    .rel-stat .lab {
+      font-size: 11.5px; color: rgba(255,255,255,.58);
+      margin-top: 4px; letter-spacing: .02em;
+    }
+
+    /* ===== CONTAINER ===== */
+    .container { max-width: 1160px; margin: 0 auto; padding: 40px 20px 80px; position: relative; z-index: 4; }
+
+    /* ===== SECTION TITLE ===== */
+    .section-title {
+      font-size: 22px; font-weight: 700; color: var(--text);
+      margin-bottom: 22px;
+      display: flex; align-items: center; gap: 10px;
+      letter-spacing: -.01em; flex-wrap: wrap;
+    }
+    .section-title .ic { color: var(--ser-futures); }
+    .title-tag {
+      font-size: 11px; font-weight: 700;
+      color: var(--primary-strong); background: var(--primary-soft);
+      border: 1px solid color-mix(in srgb, var(--ser-futures) 28%, transparent);
+      padding: 2px 9px; border-radius: 999px;
+      letter-spacing: .04em; margin-left: 2px; white-space: nowrap;
+    }
+
+    /* ===== CARD ===== */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 32px;
+      margin-bottom: 28px;
+      transition: var(--transition);
+      position: relative;
+    }
+    .card:hover { box-shadow: var(--shadow-lg); }
+
+    /* ===== SCROLL REVEAL ===== */
+    .reveal {
+      opacity: 0; transform: translateY(36px);
+      transition: opacity .7s ease-out, transform .7s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* ================================================================
+       RELEASE TIMELINE（版本发布记录）
+       同一天的多个版本合并成一个日期节点：日期是节点，版本是节点内的条目，
+       节点内按时刻倒序展开，每条精确到分钟。
+       ================================================================ */
+    .tl { position: relative; padding-left: 28px; }
+    .tl::before {
+      content: ''; position: absolute; left: 7px; top: 8px; bottom: 8px;
+      width: 2px; border-radius: 2px;
+      background: linear-gradient(180deg, var(--tl-line-a), var(--tl-line-b) 72%);
+    }
+    .tl-day { position: relative; margin-bottom: 30px; }
+    .tl-day:last-child { margin-bottom: 0; }
+    .tl-day::before {
+      content: ''; position: absolute; left: -27px; top: 5px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--brand-gradient);
+      border: 3px solid var(--card);
+      box-shadow: 0 0 0 1px var(--border);
+    }
+    .tl-day-head {
+      display: flex; align-items: baseline; gap: 9px;
+      flex-wrap: wrap; margin-bottom: 14px;
+    }
+    .tl-date { font-size: 15px; font-weight: 800; color: var(--text); letter-spacing: -.01em; }
+    .tl-week { font-size: 12px; color: var(--sub); font-weight: 600; }
+    .tl-count {
+      font-size: 11px; font-weight: 700;
+      color: var(--primary-strong); background: var(--primary-soft);
+      border: 1px solid color-mix(in srgb, var(--ser-futures) 28%, transparent);
+      padding: 2px 8px; border-radius: 999px;
+    }
+    .tl-entry {
+      position: relative;
+      background: var(--th-bg);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--ser-futures);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      transition: border-color .22s, transform .22s, box-shadow .22s;
+    }
+    .tl-entry:last-child { margin-bottom: 0; }
+    .tl-entry:hover {
+      transform: translateX(3px);
+      border-left-color: var(--primary-strong);
+      box-shadow: var(--shadow-sm);
+    }
+    .tl-entry-head {
+      display: flex; align-items: center; gap: 9px;
+      flex-wrap: wrap; margin-bottom: 6px;
+    }
+    /* 时刻徽标：等宽数字，多行能对齐 */
+    .tl-time {
+      font-size: 12px; font-weight: 700; color: var(--sub);
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .tl-time .ic { width: 13px; height: 13px; color: var(--sub); }
+    .tl-ver {
+      font-size: 13px; font-weight: 800; color: var(--primary-strong);
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+    }
+    .tl-badge {
+      font-size: 10.5px; font-weight: 700;
+      padding: 2px 8px; border-radius: 999px; letter-spacing: .04em;
+    }
+    .tl-badge.feat { background: var(--primary-soft);  color: var(--primary-strong); }
+    .tl-badge.fix  { background: var(--red-light);    color: var(--up-text); }
+    .tl-badge.perf { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-strong); }
+    .tl-badge.docs { background: color-mix(in srgb, var(--purple) 14%, transparent); color: var(--purple); }
+    .tl-badge.data { background: var(--amber-light);  color: var(--flat-fg); }
+    .tl-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+    .tl-items { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+    .tl-items li {
+      position: relative; padding-left: 15px;
+      font-size: 12.5px; line-height: 1.65; color: var(--sub);
+    }
+    .tl-items li::before {
+      content: ''; position: absolute; left: 3px; top: 8px;
+      width: 5px; height: 5px; border-radius: 50%;
+      background: color-mix(in srgb, var(--ser-futures) 55%, transparent);
+    }
+    .tl-now {
+      font-size: 10.5px; font-weight: 700;
+      color: #fff; background: var(--green);
+      padding: 2px 8px; border-radius: 999px; letter-spacing: .04em;
+    }
+    .tl-loading, .tl-error { font-size: 12.5px; color: var(--sub); padding: 14px 0; }
+    .tl-error { color: var(--up-text); }
+
+    /* ===== 返回入口（卡片底部）===== */
+    .rel-foot-link {
+      margin-top: 26px; padding-top: 22px;
+      border-top: 1px solid var(--border);
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    }
+    .rel-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 9px 18px; border-radius: 999px;
+      font-size: 13px; font-weight: 700; text-decoration: none;
+      background: var(--brand-gradient); color: #fff;
+      border: 1px solid var(--ser-futures);
+      box-shadow: 0 2px 12px var(--primary-ring);
+      transition: transform .18s, box-shadow .22s, filter .22s;
+    }
+    .rel-btn .ic { width: 16px; height: 16px; color: #fff; }
+    .rel-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px var(--primary-ring); filter: brightness(1.04); }
+    .rel-btn.ghost {
+      background: var(--card); color: var(--sub);
+      border-color: var(--border); box-shadow: none;
+    }
+    .rel-btn.ghost .ic { color: currentColor; }
+    .rel-btn.ghost:hover { color: var(--primary-strong); border-color: color-mix(in srgb, var(--ser-futures) 40%, transparent); }
+
+    /* ===== FOOTER ===== */
+    footer {
+      background: var(--hero-solid);
+      color: var(--footer-text);
+      text-align: center;
+      padding: 28px 20px;
+      font-size: 12px;
+      position: relative; z-index: 4;
+    }
+    footer a { color: rgba(255,255,255,.72); text-decoration: none; }
+    footer a:hover { color: #f3b877; }
+    footer .ic { color: inherit; vertical-align: -3px; margin-right: 3px; }
+
+    /* ================================================================
+       RESPONSIVE —— 与首页同两档：768（平板） / 640（手机）
+       ================================================================ */
+    @media (max-width: 640px) {
+      .rel-hero { padding: 38px 16px 34px; }
+      .rel-hero h1 { font-size: 23px; }
+      .rel-hero p { font-size: 13.5px; margin-bottom: 22px; }
+      .rel-stats { gap: 10px; }
+      .rel-stat { flex: 1 1 calc(50% - 10px); padding: 12px 14px; }
+      .rel-stat .val { font-size: 19px; }
+      .rel-head-inner { padding: 8px 14px; padding-right: 108px; }
+      .rel-head-title { display: none; }
+      .card { padding: 20px 16px; }
+      .section-title { font-size: 17px; gap: 8px; }
+      .theme-switch { top: 10px; right: 10px; padding: 2px; gap: 1px; }
+      .ts-btn { width: 28px; height: 28px; }
+      .ts-btn .ic { width: 16px; height: 16px; }
+      .back-top { bottom: 18px; right: 18px; width: 40px; height: 40px; }
+      /* 时间线：左轴收窄，条目内边距压小 */
+      .tl { padding-left: 22px; }
+      .tl-day::before { left: -21px; width: 13px; height: 13px; border-width: 2.5px; }
+      .tl-entry { padding: 12px 13px; }
+      .tl-items li { font-size: 12px; }
+      .boot-coil { width: 74px; height: 74px; }
+    }
+
+    /* ===== REDUCED MOTION ===== */
+    @media (prefers-reduced-motion: reduce) {
+      .boot-ring, .boot-core, .boot-bar i { animation: none !important; }
+      .boot-bar i { width: 100%; }
+      .reveal { opacity: 1 !important; transform: none !important; }
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+      html { scroll-behavior: auto; }
+    }
+
+    /* ================================================================
+       DARK THEME —— ⚠️ 与 index.html 逐字一致，两处落点：
+       ① 系统偏好（无 data-theme 时生效） ② 用户手动选择（data-theme="dark"）
+       ================================================================ */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #12100f; --card: #1c1a19; --border: #35302c;
+        --text: #ece7e3; --sub: #a8a29e;
+        --red-light: #341a1a; --green-light: #112f24; --amber-light: #3a2c12;
+        --up-text: #f87171; --down-text: #34d399; --flat-text: #fbbf24;
+        --accent-text: #e8a56b; --flat-fg: #fbbf24;
+        --ser-futures: #e0913f; --ser-spot: #2dd4bf; --ser-lme: #818cf8;
+        --ser-ratio: #a78bfa; --ser-basis: #fbbf24; --ser-vol: #3f3a35;
+        --primary: #e0913f; --primary-strong: #f0b072; --primary-soft: #33261a;
+        --primary-ring: color-mix(in srgb, #e0913f 32%, transparent);
+        --primary-glow: color-mix(in srgb, #e0913f 20%, transparent);
+        --primary-card-bg: linear-gradient(160deg, #2a2018 0%, var(--card) 62%);
+        --th-bg: #232020; --row-border: #2c2825; --row-hover: #262322;
+        --scroll-thumb: #4a443e; --sk-1: #2c2825; --sk-2: #383330;
+        --dot-ring: #12100f; --tl-line-a: #a85a22; --tl-line-b: #35302c;
+        --callout-bg: linear-gradient(135deg, #241d16, #2a231c);
+        --callout-border: #48392a;
+        --input-bg: #201d1c; --input-border: #3d3733; --chip-bg: #262322;
+        --chart-axis-label: #a8a29e; --chart-axis-line: #35302c;
+        --chart-split-line: #2c2825; --chart-zoom-bg: #35302c; --chart-icon: #a8a29e;
+        --chart-zoom-fill: rgba(224,145,63,.24);
+        --chart-area-from: rgba(224,145,63,.22); --chart-area-to: rgba(224,145,63,0);
+        --chart-tooltip-bg: rgba(10,8,6,.97); --chart-tooltip-border: #35302c;
+        --chart-tooltip-fg: #f5f1ee;
+        --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+        --shadow: 0 4px 24px rgba(0,0,0,.42);
+        --shadow-lg: 0 12px 40px rgba(0,0,0,.55);
+      }
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #12100f; --card: #1c1a19; --border: #35302c;
+      --text: #ece7e3; --sub: #a8a29e;
+      --red-light: #341a1a; --green-light: #112f24; --amber-light: #3a2c12;
+      --up-text: #f87171; --down-text: #34d399; --flat-text: #fbbf24;
+      --accent-text: #e8a56b; --flat-fg: #fbbf24;
+      --ser-futures: #e0913f; --ser-spot: #2dd4bf; --ser-lme: #818cf8;
+      --ser-ratio: #a78bfa; --ser-basis: #fbbf24; --ser-vol: #3f3a35;
+      --primary: #e0913f; --primary-strong: #f0b072; --primary-soft: #33261a;
+      --primary-ring: color-mix(in srgb, #e0913f 32%, transparent);
+      --primary-glow: color-mix(in srgb, #e0913f 20%, transparent);
+      --primary-card-bg: linear-gradient(160deg, #2a2018 0%, var(--card) 62%);
+      --th-bg: #232020; --row-border: #2c2825; --row-hover: #262322;
+      --scroll-thumb: #4a443e; --sk-1: #2c2825; --sk-2: #383330;
+      --dot-ring: #12100f; --tl-line-a: #a85a22; --tl-line-b: #35302c;
+      --callout-bg: linear-gradient(135deg, #241d16, #2a231c);
+      --callout-border: #48392a;
+      --input-bg: #201d1c; --input-border: #3d3733; --chip-bg: #262322;
+      --chart-axis-label: #a8a29e; --chart-axis-line: #35302c;
+      --chart-split-line: #2c2825; --chart-zoom-bg: #35302c; --chart-icon: #a8a29e;
+      --chart-zoom-fill: rgba(224,145,63,.24);
+      --chart-area-from: rgba(224,145,63,.22); --chart-area-to: rgba(224,145,63,0);
+      --chart-tooltip-bg: rgba(10,8,6,.97); --chart-tooltip-border: #35302c;
+      --chart-tooltip-fg: #f5f1ee;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+      --shadow: 0 4px 24px rgba(0,0,0,.42);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,.55);
+    }
+
+    /* ===== PRINT ===== */
+    @media print {
+      :root {
+        color-scheme: light !important;
+        --bg: #fff !important; --card: #fff !important;
+        --border: #d6d3d1 !important; --text: #1c1917 !important; --sub: #57534e !important;
+        --shadow: none !important; --shadow-sm: none !important; --shadow-lg: none !important;
+        --row-hover: #fff !important; --th-bg: #f5f5f4 !important;
+      }
+      .back-top, .theme-switch, .boot, .rel-head { display: none !important; }
+      .reveal { opacity: 1 !important; transform: none !important; }
+      .card { break-inside: avoid; }
+      .rel-hero, footer { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ========== 首屏全局加载 ========== -->
+<div class="boot" id="bootScreen" role="status" aria-live="polite" aria-label="页面加载中">
+  <div class="boot-inner">
+    <div class="boot-coil" aria-hidden="true">
+      <svg viewBox="0 0 100 100">
+        <defs>
+          <linearGradient id="bootCu" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#f0b072" />
+            <stop offset=".5" stop-color="#c2703d" />
+            <stop offset="1" stop-color="#7a3f18" />
+          </linearGradient>
+        </defs>
+        <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="2" />
+        <g class="boot-ring">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="url(#bootCu)" stroke-width="3.2"
+                  stroke-linecap="round" stroke-dasharray="66 198" />
+        </g>
+        <g class="boot-core" fill="none" stroke="url(#bootCu)" stroke-width="2.2">
+          <ellipse cx="50" cy="50" rx="21" ry="13" />
+          <ellipse cx="50" cy="50" rx="14.5" ry="8.6" />
+          <ellipse cx="50" cy="50" rx="7.8" ry="4.4" />
+        </g>
+      </svg>
+    </div>
+    <div class="boot-title">版本发布记录</div>
+    <div class="boot-bar"><i></i></div>
+    <div class="boot-text" id="bootText">正在读取版本记录…</div>
+  </div>
+</div>
+
+<!-- ========== 图标库（stroke 继承 currentColor，尺寸由 .ic 控制）========== -->
+<svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+  <symbol id="i-coil" viewBox="0 0 24 24">
+    <ellipse cx="12" cy="12" rx="9" ry="5.6" />
+    <ellipse cx="12" cy="12" rx="6.2" ry="3.7" />
+    <ellipse cx="12" cy="12" rx="3.3" ry="1.9" />
+  </symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24">
+    <path d="M20.4 12.6 12.6 20.4a1.4 1.4 0 0 1-2 0L4.2 14a1.4 1.4 0 0 1-.4-1V4.6a1.4 1.4 0 0 1 1.4-1.4h8.4a1.4 1.4 0 0 1 1 .4l5.4 5.4a1.4 1.4 0 0 1 0 2z" />
+    <circle cx="8.2" cy="8.2" r="1.6" />
+  </symbol>
+  <symbol id="i-back" viewBox="0 0 24 24">
+    <line x1="19" y1="12" x2="5.5" y2="12" />
+    <polyline points="11.5 6 5.5 12 11.5 18" />
+  </symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8.5" />
+    <polyline points="12 7 12 12 16 14.2" />
+  </symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24">
+    <line x1="12" y1="19.5" x2="12" y2="5.5" />
+    <polyline points="6 11.5 12 5.5 18 11.5" />
+  </symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="4.2" />
+    <line x1="12" y1="2.6" x2="12" y2="5" /><line x1="12" y1="19" x2="12" y2="21.4" />
+    <line x1="2.6" y1="12" x2="5" y2="12" /><line x1="19" y1="12" x2="21.4" y2="12" />
+    <line x1="5.4" y1="5.4" x2="7.1" y2="7.1" /><line x1="16.9" y1="16.9" x2="18.6" y2="18.6" />
+    <line x1="18.6" y1="5.4" x2="16.9" y2="7.1" /><line x1="7.1" y1="16.9" x2="5.4" y2="18.6" />
+  </symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24">
+    <path d="M20.2 14.4A8.5 8.5 0 0 1 9.6 3.8a8.6 8.6 0 1 0 10.6 10.6z" />
+  </symbol>
+  <symbol id="i-auto" viewBox="0 0 24 24">
+    <rect x="3" y="4.5" width="18" height="12" rx="2" />
+    <line x1="9" y1="19.8" x2="15" y2="19.8" />
+    <line x1="12" y1="16.5" x2="12" y2="19.8" />
+  </symbol>
+  <symbol id="i-trend" viewBox="0 0 24 24">
+    <polyline points="3 16 9 10 13 14 21 6" />
+    <polyline points="15 6 21 6 21 12" />
+  </symbol>
+</svg>
+
+<div class="theme-switch" id="themeSwitch" role="group" aria-label="主题">
+  <button class="ts-btn" type="button" data-theme-mode="auto" aria-pressed="false"
+          title="跟随系统" aria-label="跟随系统">
+    <svg class="ic" aria-hidden="true"><use href="#i-auto" /></svg>
+  </button>
+  <button class="ts-btn" type="button" data-theme-mode="light" aria-pressed="false"
+          title="浅色" aria-label="浅色">
+    <svg class="ic" aria-hidden="true"><use href="#i-sun" /></svg>
+  </button>
+  <button class="ts-btn" type="button" data-theme-mode="dark" aria-pressed="false"
+          title="深色" aria-label="深色">
+    <svg class="ic" aria-hidden="true"><use href="#i-moon" /></svg>
+  </button>
+</div>
+
+<!-- ========== 顶栏 ========== -->
+<header class="rel-head">
+  <div class="rel-head-inner">
+    <a class="rel-back" href="./index.html">
+      <svg class="ic" aria-hidden="true"><use href="#i-back" /></svg>行情首页
+    </a>
+    <span class="rel-head-title">
+      <svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg>版本发布记录
+    </span>
+  </div>
+</header>
+
+<!-- ========== 页头 ========== -->
+<section class="rel-hero">
+  <div class="rel-hero-glow" aria-hidden="true"></div>
+  <div class="rel-hero-inner">
+    <div class="rel-badge"><span class="dot"></span>沪铜价格趋势 · 迭代日志</div>
+    <h1>版本发布记录<br><span class="cu">每次改动都可追溯</span></h1>
+    <p>记录每一次发布的时间、版本号与变更明细。同一日发布的多个版本合并为一个日期节点，节点内按时刻倒序展开。</p>
+    <div class="rel-stats">
+      <div class="rel-stat is-primary">
+        <div class="val" id="relCurrent">—</div>
+        <div class="lab">当前版本</div>
+      </div>
+      <div class="rel-stat">
+        <div class="val" id="relTotal">—</div>
+        <div class="lab">版本总数</div>
+      </div>
+      <div class="rel-stat">
+        <div class="val" id="relLatest">—</div>
+        <div class="lab">最近发布</div>
+      </div>
+      <div class="rel-stat">
+        <div class="val" id="relSince">—</div>
+        <div class="lab">首个版本</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="container">
+
+  <!-- ========== 时间线 ==========
+       数据来自 releases.json（不是 data.json —— 后者每天被 Actions 重写）。 -->
+  <div class="card reveal" id="sec-timeline">
+    <div class="section-title">
+      <svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg>全部发布
+      <span class="title-tag" id="relTag">—</span>
+    </div>
+    <div id="releaseTimeline"><div class="tl-loading">正在读取版本记录…</div></div>
+
+    <div class="rel-foot-link">
+      <a class="rel-btn" href="./index.html">
+        <svg class="ic" aria-hidden="true"><use href="#i-trend" /></svg>查看实时铜价行情
+      </a>
+      <a class="rel-btn ghost" href="https://github.com/ToniaXuu/copper-price-tracker" target="_blank" rel="noopener">
+        <svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg>源码仓库
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<button class="back-top" id="backTop" aria-label="回到顶部">
+  <svg class="ic" aria-hidden="true"><use href="#i-arrow-up" /></svg>
+</button>
+
+<footer>
+  <p>版本发布记录 · 沪铜价格趋势 &nbsp;|&nbsp; 时间均为北京时间（CST）</p>
+  <p style="margin-top:6px">
+    共 <span id="footTotal">—</span> 个版本
+    &nbsp;|&nbsp; 当前 <span id="footCurrent">—</span>
+    &nbsp;|&nbsp; <a href="./index.html">返回行情首页</a>
+    &nbsp;|&nbsp; <a href="https://github.com/ToniaXuu" target="_blank" rel="noopener">@ToniaXuu</a>
+  </p>
+</footer>
+
+<script>
+// ================================================================
+// 版本发布记录页 · 渲染逻辑
+// 数据源: releases.json
+// 口径：同一天发布的多个版本合并为一个日期节点，节点内按时刻倒序展开。
+// ⚠️ 时刻（time）是当天真实发布时刻，不要为了好看而调整顺序或合并不同天的版本。
+// ================================================================
+
+// ============ 首屏加载遮罩 ============
+// 与首页同一套收尾逻辑：MIN 避免闪一下，MAX 兜底 ——
+// 任何异常都不能把用户关在遮罩里。
+const bootEl = document.getElementById('bootScreen');
+const bootTextEl = document.getElementById('bootText');
+const BOOT_MIN_MS = 400;
+const BOOT_MAX_MS = 8000;
+const bootStartAt = Date.now();
+let bootDone = false;
+
+function bootStage(text) {
+  if (bootTextEl && text) bootTextEl.textContent = text;
+}
+
+function hideBoot() {
+  if (bootDone) return;
+  bootDone = true;
+  const wait = Math.max(0, BOOT_MIN_MS - (Date.now() - bootStartAt));
+  setTimeout(() => {
+    if (bootEl) {
+      bootEl.classList.add('done');
+      // 用 style 而非 hidden：.boot{display:flex} 优先级高于 UA 的 [hidden]{display:none}
+      setTimeout(() => { bootEl.style.display = 'none'; }, 600);
+    }
+    document.documentElement.classList.remove('is-booting');
+  }, wait);
+}
+
+document.documentElement.classList.add('is-booting');
+setTimeout(hideBoot, BOOT_MAX_MS);
+
+// ============ 工具 ============
+function escHtml(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function fmtFull(iso) {
+  const p = String(iso).split('-');
+  if (p.length !== 3) return iso;
+  return p[0] + '年' + Number(p[1]) + '月' + Number(p[2]) + '日';
+}
+function weekdayCN(iso) {
+  const d = new Date(iso + 'T00:00:00+08:00');
+  if (isNaN(d.getTime())) return '';
+  return '周' + '日一二三四五六'[d.getDay()];
+}
+// "11:45:00" / "11:45" → "11:45"；缺失返回 "--:--"
+function fmtReleaseTime(t) {
+  const s = String(t || '').trim();
+  return /^\d{1,2}:\d{2}/.test(s) ? s.slice(0, 5) : '--:--';
+}
+
+const RELEASE_TYPE_LABEL = { feat: '新增', fix: '修复', perf: '优化', docs: '文档', data: '数据' };
+
+// ============ 渲染 ============
+function renderReleaseEntry(r, isLatest) {
+  const rawType = String(r.type || '').toLowerCase();
+  const type = RELEASE_TYPE_LABEL[rawType] ? rawType : 'feat';
+  const items = Array.isArray(r.items) ? r.items : [];
+  return '<div class="tl-entry">' +
+      '<div class="tl-entry-head">' +
+        '<span class="tl-time"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg>' +
+          escHtml(fmtReleaseTime(r.time)) + '</span>' +
+        '<span class="tl-ver">v' + escHtml(r.version) + '</span>' +
+        '<span class="tl-badge ' + type + '">' + RELEASE_TYPE_LABEL[type] + '</span>' +
+        (isLatest ? '<span class="tl-now">最新</span>' : '') +
+      '</div>' +
+      (r.title ? '<div class="tl-title">' + escHtml(r.title) + '</div>' : '') +
+      (items.length
+        ? '<ul class="tl-items">' + items.map((i) => '<li>' + escHtml(i) + '</li>').join('') + '</ul>'
+        : '') +
+    '</div>';
+}
+
+function renderReleases(payload) {
+  const host = document.getElementById('releaseTimeline');
+  if (!host) return;
+  const list = (payload && Array.isArray(payload.releases)) ? payload.releases : [];
+  const meta = (payload && payload.meta) || {};
+
+  const sortByTimeDesc = (a, b) =>
+    String(b.time || '').localeCompare(String(a.time || ''), undefined, { numeric: true });
+
+  // 顶部统计
+  const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setText('relCurrent', meta.current ? 'v' + meta.current : '—');
+  setText('relTotal', list.length + ' 个');
+  setText('relTag', meta.current ? 'v' + meta.current : list.length + ' 个版本');
+  setText('footTotal', list.length);
+  setText('footCurrent', meta.current ? 'v' + meta.current : '—');
+
+  if (!list.length) {
+    host.innerHTML = '<div class="tl-loading">暂无版本记录</div>';
+    setText('relLatest', '—');
+    setText('relSince', '—');
+    return;
+  }
+
+  // ---- 按日期归并：同一天的多个版本共用一个日期节点 ----
+  const byDate = new Map();
+  list.forEach((r) => {
+    const d = String(r.date || '未知日期');
+    if (!byDate.has(d)) byDate.set(d, []);
+    byDate.get(d).push(r);
+  });
+
+  // 日期倒序：最近的一天排最上面
+  // ⚠️ 必须用 Array.from —— Map 的 keys() 返回的是 Iterator 而非类数组（没有 length），
+  // Array.prototype.slice.call() 会静默得到空数组，然后 days[0] 为 undefined、
+  // byDate.get(undefined) 再 .slice() 直接抛错，整条时间线渲染不出来。
+  const days = Array.from(byDate.keys()).sort((a, b) => b.localeCompare(a));
+  const latestEntry = byDate.get(days[0]).slice().sort(sortByTimeDesc)[0];
+  const oldest = days[days.length - 1];
+
+  setText('relLatest', fmtReleaseTime(latestEntry.time) + ' · ' + fmtFull(days[0]).replace(/^\d+年/, ''));
+  setText('relSince', oldest.slice(0, 4) + ' 年');
+
+  host.innerHTML = '<div class="tl">' + days.map((day) => {
+    // 节点内按时刻倒序 —— 同一天里的先后顺序一眼可见
+    const entries = byDate.get(day).slice().sort(sortByTimeDesc);
+    return '<div class="tl-day">' +
+        '<div class="tl-day-head">' +
+          '<span class="tl-date">' + escHtml(fmtFull(day)) + '</span>' +
+          '<span class="tl-week">' + escHtml(weekdayCN(day)) + '</span>' +
+          '<span class="tl-count">' + entries.length + ' 个版本</span>' +
+        '</div>' +
+        entries.map((r) => renderReleaseEntry(r, r === latestEntry)).join('') +
+      '</div>';
+  }).join('') + '</div>';
+}
+
+async function loadReleases() {
+  const host = document.getElementById('releaseTimeline');
+  try {
+    const resp = await fetch('./releases.json', { cache: 'no-cache' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    bootStage('正在渲染时间线…');
+    renderReleases(await resp.json());
+  } catch (err) {
+    if (host) {
+      host.innerHTML = '<div class="tl-error">版本记录加载失败：' + escHtml(err.message) + '</div>';
+    }
+    console.warn('releases.json 加载失败:', err.message);
+  }
+}
+
+// ================================================================
+// 主题管理：auto（跟随系统） / light / dark
+// 与 index.html 同一套：选择持久化到 localStorage，?theme= 可临时覆盖。
+// 本页无图表，故 applyTheme 不需要重绘图表。
+// ================================================================
+const THEME_KEY = 'cpt-theme';
+const THEME_MODES = ['auto', 'light', 'dark'];
+const THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
+
+function readThemeMode() {
+  let m = null;
+  try { m = new URLSearchParams(location.search).get('theme'); } catch (e) {}
+  if (!m) { try { m = localStorage.getItem(THEME_KEY); } catch (e) {} }
+  return THEME_MODES.indexOf(m) >= 0 ? m : 'auto';
+}
+
+let _themeMode = readThemeMode();
+
+function syncThemeSwitch(mode) {
+  document.querySelectorAll('#themeSwitch .ts-btn').forEach((b) => {
+    const on = b.dataset.themeMode === mode;
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.setAttribute('aria-label', THEME_LABEL[b.dataset.themeMode] + (on ? '（当前）' : ''));
+  });
+}
+function applyTheme(mode, persist) {
+  _themeMode = mode;
+  const root = document.documentElement;
+  if (mode === 'auto') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', mode);
+  if (persist) { try { localStorage.setItem(THEME_KEY, mode); } catch (e) {} }
+  syncThemeSwitch(mode);
+}
+document.querySelectorAll('#themeSwitch .ts-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.themeMode;
+    if (mode !== _themeMode) applyTheme(mode, true);
+  });
+});
+applyTheme(_themeMode, false);
+
+// ============ 回到顶部 ============
+const backTopEl = document.getElementById('backTop');
+let _scrollPending = false;
+window.addEventListener('scroll', () => {
+  if (_scrollPending) return;
+  _scrollPending = true;
+  requestAnimationFrame(() => {
+    backTopEl.classList.toggle('visible', window.scrollY > 480);
+    _scrollPending = false;
+  });
+}, { passive: true });
+backTopEl.addEventListener('click', () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// ============ 滚入渐显 ============
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1, rootMargin: '0px 0px -30px 0px' });
+
+// ============ 启动 ============
+function bootRun() {
+  Promise.resolve()
+    .then(loadReleases)
+    .catch((err) => { console.error('版本记录初始化失败:', err); })
+    .finally(() => {
+      hideBoot();
+      document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el));
+    });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootRun);
+} else {
+  bootRun();
+}
+
+// ============ PWA Service Worker ============
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

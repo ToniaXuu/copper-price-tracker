@@ -125,24 +125,30 @@ python scripts/send_notification.py
 ## 7. 文件结构
 
 ```
-├── index.html                          # 单文件页面（ECharts 走 CDN）
-├── data.json                           # 数据（Actions 自动提交，别手改）
+├── index.html                          # 行情主页面（ECharts 走 CDN）
+├── releases.html                       # 版本发布记录（独立页，与主页共用同一套设计令牌）
+├── data.json                           # 行情数据（Actions 自动提交，别手改）
+├── releases.json                       # 版本记录数据（发版时手改）
 ├── manifest.json / sw.js               # PWA
-├── sw.js 的 data.json 策略：网络优先     # 1MB 不预缓存，见下
 ├── scripts/
 │   ├── update_copper.py                # 数据层：五源降级 + 健康登记 + 校验
 │   ├── send_notification.py            # 推送层：双通道 + 涨跌特化标题
 │   ├── generate_icons.py               # 生成 PWA 图标
-│   ├── verify_static.py                # 静态校验：JSON / 内联 JS / DOM id / 资源路径
+│   ├── verify_static.py                # 静态校验：双页 JSON / JS / DOM id / 资源路径 / 令牌一致性
 │   └── runtime_probe.py                # 运行时探针：自写 CDP 客户端取真实渲染数值
 └── .github/workflows/update-copper.yml # 定时工作流
 ```
 
-`sw.js` 里静态资源走「缓存优先」，`data.json` 走「网络优先」并绕开 HTTP 缓存 —— 否则会拿到陈旧的铜价。
+`sw.js` 里静态资源走「缓存优先」，`data.json` 与 `releases.json` 走「网络优先」并绕开 HTTP 缓存 —— 否则会拿到陈旧数据。
+
+两条容易忘的连带约定：
+
+- 两个页面共用一套设计令牌（`:root` + 两处暗色覆盖），**改配色必须两个文件一起改**。`verify_static.py` 会逐值比对 79 个令牌，漂移直接判失败。
+- 改完任一页面，**必须同步升 `sw.js` 的 `CACHE_NAME`**。页面本身走「缓存优先」，不升版本号老访客会一直看到旧页面。
 
 ---
 
-## 8. 三个必须记住的坑（都实测踩过）
+## 8. 四个必须记住的坑（都实测踩过）
 
 **坑 1：新浪 `CU0` 是僵尸代码，必须用 `nf_CU0`**
 
@@ -167,6 +173,17 @@ hq.sinajs.cn/list=nf_CU0  → 当前真实行情                ✅
 
 顺带一个同源陷阱：`new Date(iso + 'T00:00:00+08:00').toISOString().slice(0,10)` 会**少一天**（东八区午夜等于 UTC 前一天 16:00）。日期算术一律走 `setUTCDate`。
 
+**坑 4：`Array.prototype.slice.call()` 对 Map/Set 的 Iterator 无效**
+
+```js
+const days = Array.prototype.slice.call(byDate.keys());  // ❌ 得到 []（Iterator 没有 length）
+const days = Array.from(byDate.keys());                  // ✅ 正确
+```
+
+`slice.call` 只对**类数组**（有 `length`）有效：`querySelectorAll` 返回的 NodeList 可以，`Map.keys()` / `Set.values()` 返回的 Iterator 不行。
+
+它不报错，只静默给你空数组 —— 于是 `days[0]` 是 `undefined`，下游再取属性时才炸，**报错位置离根因很远**。版本发布记录页第一次跑就是这样：统计数字全对（在出错前已渲染），整条时间线却一片空白。`node --check` 这类静态检查完全抓不到，只有运行时探针能发现。
+
 ---
 
 ## 9. 验证
@@ -174,8 +191,8 @@ hq.sinajs.cn/list=nf_CU0  → 当前真实行情                ✅
 改动后跑这两条，别只改不验：
 
 ```bash
-python scripts/verify_static.py    # JSON / 内联 JS 语法 / DOM id 闭环 / 资源路径
-python scripts/runtime_probe.py    # 无头 Chrome 取真实渲染值（数据/图表/主题/换算器/区间）
+python scripts/verify_static.py    # 双页：JSON / JS 语法 / DOM id 闭环 / 资源路径 / 令牌一致性
+python scripts/runtime_probe.py    # 无头 Chrome 取真实渲染值（主页 + 版本记录页）
 ```
 
 `runtime_probe.py` 自带一个零依赖 CDP 客户端，直接连 DevTools 协议，检查项包括：
