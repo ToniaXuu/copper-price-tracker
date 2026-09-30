@@ -1,15 +1,18 @@
 name: 自动更新沪铜价格数据
 
 on:
-  # 08:30（北京时间）= 00:30 UTC。
-  # 为什么是 08:30：SHFE 的结算价与收盘价在盘中是空字符串（实测），
-  # 必须等收盘结算之后跑；08:30 拿到的正是上一个交易日的完整结算数据，
-  # 同时和油价项目的 09:00 推送错开时段。
-  # 注：GitHub Actions 的 schedule 常延迟 5~20 分钟，精确触发另由 cron-job.org 兜底。
-  schedule:
-    - cron: "30 0 * * *"
+  # 定时调度**不在 GitHub 上**：本项目统一由 cron-job.org 在 08:30（北京时间）调
+  # workflow_dispatch API 精确触发。GitHub 原生 schedule 常延迟 5~20 分钟，且会和
+  # 外部 cron 抢着提交 data.json（偶发非快进冲突），故刻意不启用 schedule。
+  # cron-job.org 配置（如需重建）：
+  #   URL:    https://api.github.com/repos/ToniaXuu/copper-price-tracker/actions/workflows/update-copper.yml/dispatches
+  #   Method: POST
+  #   Header: Authorization: Bearer <Fine-grained PAT, 需 actions:write>
+  #           Accept: application/vnd.github+json
+  #   Body:   {"ref":"main"}
+  #   计划:   每天 08:30 Asia/Shanghai
 
-  # 支持手动触发
+  # 手动触发（也是 cron-job.org 实际调用的入口）
   workflow_dispatch:
 
 jobs:

@@ -18,7 +18,7 @@
 | **现货均价** | 1# 电解铜多供应商均价，用来算基差 | 生意社（两步 cookie 握手）               |
 | **沪伦比** | 沪铜结算价 ÷ LME 铜价，看内外盘强弱 | 新浪 LME 铜 3 月（`hf_CAD`）          |
 
-推送方式：Server 酱（微信）+ 钉钉机器人，每天 **08:30** 一次。
+推送方式：Server 酱（微信）+ 钉钉机器人，每天 **08:30** 一次（由 cron-job.org 触发，见第 6 节）。
 
 ---
 
@@ -41,16 +41,21 @@
 ## 3. 架构：零服务器
 
 ```
-GitHub Actions (cron 30 0 * * *，即 08:30 CST)
-   └─ scripts/update_copper.py
-        ├─ 五源抓取 + 健康登记 + 校验 + 推导（基差/沪伦比）
-        ├─ 写 data.json
-        └─ 主指标全源失效 → exit(1)（workflow 红灯，不发假消息）
-   └─ git commit & push data.json
-   └─ scripts/send_notification.py  →  微信 + 钉钉
+cron-job.org（08:30 CST，POST workflow_dispatch API）  ← 唯一调度入口
+   └─ GitHub Actions: .github/workflows/update-copper.yml
+        ├─ scripts/update_copper.py
+        │    ├─ 五源抓取 + 健康登记 + 校验 + 推导（基差/沪伦比）
+        │    ├─ 写 data.json
+        │    └─ 主指标全源失效 → exit(1)（workflow 红灯，不发假消息）
+        ├─ git commit & push data.json
+        └─ scripts/send_notification.py  →  微信 + 钉钉
                 ↓
 GitHub Pages 静态页  fetch('./data.json')  →  渲染
 ```
+
+> **为什么不用 GitHub 原生 `schedule`**：实测常延迟 5~20 分钟；且 GitHub 的定时任务与外部 cron 存在各跑各的、抢着提交 `data.json` 导致非快进冲突的风险。故 workflow 里**刻意不写 `schedule:`**，只留 `workflow_dispatch`，由 cron-job.org 精确触发。
+
+> **重要**：本机推送过 `.github/workflows/` 下的改动后，**cron-job.org 的计划不会自动同步**（它只认自己的配置）。若改了触发时间，需要去 cron-job.org 后台同步改。
 
 为什么要等收盘：上期所 `kx{date}.dat` 里的 `SETTLEMENTPRICE` / `CLOSEPRICE` 在盘中是**空字符串**，08:30 拿到的正是上一交易日的完整结算数据。
 
@@ -116,7 +121,16 @@ python scripts/send_notification.py
 | `DINGTALK_WEBHOOK`   | 钉钉机器人 Webhook URL               |
 | `DINGTALK_SECRET`    | 钉钉加签密钥（用加签模式时必须，否则留空）           |
 
-3. Actions 的 `schedule` 常延迟 5~20 分钟，精确触发另用 **cron-job.org** 定时 `POST` 仓库的 `workflow_dispatch` 接口兜底。
+3. 每天 08:30 由 **cron-job.org** `POST` 以下接口触发（workflow 内无 `schedule`）：
+
+   ```
+   POST https://api.github.com/repos/ToniaXuu/copper-price-tracker/actions/workflows/update-copper.yml/dispatches
+   Authorization: Bearer <Fine-grained PAT，需 Actions: Read and write>
+   Accept: application/vnd.github+json
+   Body: {"ref":"main"}
+   ```
+
+   cron-job.org 计划时区选 **Asia/Shanghai**，时间 08:30。PAT 建议设 1 年有效期并记在日历上——过期后触发会静默 401，站点就停在旧数据上。
 
 通知步骤带 `if: always()`：数据源全灭导致抓取脚本 `exit(1)` 时，告警仍然送得出去。
 
@@ -136,7 +150,7 @@ python scripts/send_notification.py
 │   ├── generate_icons.py               # 生成 PWA 图标
 │   ├── verify_static.py                # 静态校验：双页 JSON / JS / DOM id / 资源路径 / 令牌一致性
 │   └── runtime_probe.py                # 运行时探针：自写 CDP 客户端取真实渲染数值
-└── .github/workflows/update-copper.yml # 定时工作流
+└── .github/workflows/update-copper.yml # 更新工作流（仅 workflow_dispatch，由 cron-job.org 调）
 ```
 
 `sw.js` 里静态资源走「缓存优先」，`data.json` 与 `releases.json` 走「网络优先」并绕开 HTTP 缓存 —— 否则会拿到陈旧数据。
