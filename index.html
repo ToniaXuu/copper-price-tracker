@@ -796,11 +796,37 @@
        替代原先的「显示更多」累加展开：5289 条全铺开时页面根本滑不到底。
        布局：上行「第 x/y 页 · 第 a~b 条 / 共 n 条」，下行页码控件 + 跳转。 */
     .pager {
-      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-      gap: 12px; margin-top: 18px; padding-top: 16px;
+      display: flex; flex-direction: column; gap: 10px;
+      margin-top: 18px; padding-top: 16px;
       border-top: 1px solid var(--border);
     }
     .pg-summary { font-size: 12.5px; color: var(--sub); font-variant-numeric: tabular-nums; }
+    /* 控件行：每页条数 | 页码 | 跳转，三段靠两端 + 中间均分 */
+    .pg-ctl {
+      display: flex; flex-wrap: wrap; align-items: center;
+      justify-content: space-between; gap: 10px 14px;
+    }
+    .pg-size {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12.5px; color: var(--sub); white-space: nowrap;
+    }
+    .pg-select {
+      height: 34px; padding: 0 26px 0 10px;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--card); color: var(--text);
+      font-family: inherit; font-size: 12.5px; font-weight: 600;
+      cursor: pointer; transition: var(--transition);
+      font-variant-numeric: tabular-nums;
+      /* 自绘下拉箭头（原生箭头在暗色主题下是深色，看不见） */
+      appearance: none; -webkit-appearance: none;
+      background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                        linear-gradient(135deg, currentColor 50%, transparent 50%);
+      background-position: calc(100% - 14px) 15px, calc(100% - 9px) 15px;
+      background-size: 5px 5px, 5px 5px;
+      background-repeat: no-repeat;
+    }
+    .pg-select:hover { border-color: var(--ser-futures); color: var(--primary-strong); }
+    .pg-select:focus { outline: none; border-color: var(--ser-futures); box-shadow: 0 0 0 3px var(--primary-soft); }
     .pg-ctrl { display: flex; align-items: center; gap: 4px; }
     .pg-btn {
       min-width: 34px; height: 34px; padding: 0 10px;
@@ -863,7 +889,19 @@
       display: flex; align-items: flex-start; gap: 10px;
       background: var(--bg); border: 1px solid var(--border);
       border-radius: var(--radius-sm); padding: 13px 15px;
+      /* 可点击跳转官网：做成 <a> 后需显式声明，否则会继承链接下划线/颜色 */
+      color: inherit; text-decoration: none;
+      transition: var(--transition);
+      position: relative;
     }
+    a.src-item:hover, a.src-item:focus-visible {
+      border-color: var(--ser-futures);
+      background: var(--primary-soft);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+      outline: none;
+    }
+    a.src-item:focus-visible { box-shadow: 0 0 0 3px var(--primary-ring); }
     .src-item .sdot {
       width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto;
       background: var(--green);
@@ -872,6 +910,20 @@
     .src-item .sn { font-size: 13px; font-weight: 700; }
     .src-item .sd { font-size: 11.5px; color: var(--sub); line-height: 1.55; margin-top: 2px; }
     .src-item .sf { font-size: 11px; color: var(--up-text); font-weight: 700; margin-top: 3px; }
+    /* 名称行：标题 + 外链箭头，箭头在 hover 时由铜色点亮 */
+    .src-item .sn-row { display: flex; align-items: center; gap: 5px; }
+    .src-item .sgo {
+      width: 12px; height: 12px; flex: 0 0 auto;
+      color: var(--sub); opacity: .55;
+      transition: color .22s, opacity .22s, transform .22s;
+    }
+    a.src-item:hover .sgo, a.src-item:focus-visible .sgo {
+      color: var(--ser-futures); opacity: 1; transform: translate(2px, -2px);
+    }
+    .src-hint {
+      font-size: 12px; color: var(--sub); line-height: 1.6;
+      margin: -12px 0 14px;   /* 抵消 .section-title 的 22px → 净 10px */
+    }
 
     /* ===== CALLOUT ===== */
     .callout {
@@ -1185,12 +1237,18 @@
       .mini-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .quick-stats { gap: 12px; }
       .ohlc-grid .oc b { font-size: 12px; }
-      /* 分页器：手机上页码数字太占宽，只留当前页 + 跳转；控件整体居中换行 */
-      .pager { justify-content: center; gap: 10px; }
-      .pg-summary { flex-basis: 100%; text-align: center; }
-      .pg-jump { order: 3; flex-basis: 100%; justify-content: center; }
-      .pg-btn { min-width: 38px; height: 38px; }
-      .pg-num { min-width: 30px; height: 38px; padding: 0 6px; font-size: 12.5px; }
+      /* 分页器：手机上三行堆叠（摘要 / 页码 / 每页条数+跳转），控件全部居中。
+         页码现在固定最多 7 块，不再依赖断点分支，所以这里只调尺寸与换行。 */
+      .pager { gap: 8px; }
+      .pg-summary { text-align: center; }
+      .pg-ctl { justify-content: center; gap: 8px 12px; }
+      .pg-size { order: 2; }
+      .pg-ctrl { order: 1; flex-basis: 100%; justify-content: center; }
+      .pg-jump { order: 3; }
+      .pg-btn { min-width: 36px; height: 36px; padding: 0 8px; }
+      .pg-num { min-width: 32px; height: 36px; padding: 0 6px; font-size: 12.5px; }
+      .pg-select { height: 36px; }
+      .pg-input { width: 54px; height: 36px; }
       /* 导航：横滚不换行。主题切换器现在实体位于 .pn-tail 插槽内（见 adoptThemeSwitch），
          不再需要在导航内预留 108px 的盲区，只留一点与插槽的间隙。 */
       .pn-inner { padding: 7px 14px; padding-right: 8px; gap: 5px; }
@@ -1433,6 +1491,12 @@
   <symbol id="i-tag" viewBox="0 0 24 24">
     <path d="M20.4 12.6 12.6 20.4a1.4 1.4 0 0 1-2 0L4.2 14a1.4 1.4 0 0 1-.4-1V4.6a1.4 1.4 0 0 1 1.4-1.4h8.4a1.4 1.4 0 0 1 1 .4l5.4 5.4a1.4 1.4 0 0 1 0 2z" />
     <circle cx="8.2" cy="8.2" r="1.6" />
+  </symbol>
+  <!-- 外链箭头：数据源卡片的「可跳转官网」指示 -->
+  <symbol id="i-external" viewBox="0 0 24 24">
+    <path d="M14 4h6v6" />
+    <path d="M20 4l-9 9" />
+    <path d="M18 14.5V19a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H10" />
   </symbol>
 </svg>
 
@@ -1850,18 +1914,24 @@
     </div>
     <nav class="pager" id="tablePager" aria-label="历史数据分页">
       <div class="pg-summary" id="pgSummary"></div>
-      <div class="pg-ctrl">
-        <button class="pg-btn" id="pgFirst" type="button" aria-label="第一页">«</button>
-        <button class="pg-btn" id="pgPrev" type="button" aria-label="上一页">‹</button>
-        <span class="pg-nums" id="pgNums"></span>
-        <button class="pg-btn" id="pgNext" type="button" aria-label="下一页">›</button>
-        <button class="pg-btn" id="pgLast" type="button" aria-label="最后一页">»</button>
-      </div>
-      <div class="pg-jump">
-        <label for="pgJumpInput">跳至</label>
-        <input class="pg-input" id="pgJumpInput" type="number" min="1" inputmode="numeric" aria-label="跳至第几页">
-        <span>页</span>
-        <button class="pg-btn pg-go" id="pgJumpGo" type="button">Go</button>
+      <div class="pg-ctl">
+        <div class="pg-size">
+          <label for="pgSize">每页</label>
+          <select class="pg-select" id="pgSize" aria-label="每页显示条数"></select>
+        </div>
+        <div class="pg-ctrl">
+          <button class="pg-btn" id="pgFirst" type="button" aria-label="第一页">«</button>
+          <button class="pg-btn" id="pgPrev" type="button" aria-label="上一页">‹</button>
+          <span class="pg-nums" id="pgNums"></span>
+          <button class="pg-btn" id="pgNext" type="button" aria-label="下一页">›</button>
+          <button class="pg-btn" id="pgLast" type="button" aria-label="最后一页">»</button>
+        </div>
+        <div class="pg-jump">
+          <label for="pgJumpInput">跳至</label>
+          <input class="pg-input" id="pgJumpInput" type="number" min="1" inputmode="numeric" aria-label="跳至第几页">
+          <span>/ <b id="pgJumpMax">—</b> 页</span>
+          <button class="pg-btn pg-go" id="pgJumpGo" type="button">Go</button>
+        </div>
       </div>
     </nav>
   </div>
@@ -1869,6 +1939,7 @@
   <!-- ========== 数据源状态 ========== -->
   <div class="card reveal" id="sec-health">
     <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>数据源状态<span class="title-tag" id="healthTag">—</span></div>
+    <p class="src-hint">点击任一数据源可在新窗口打开其官网核对原始行情。</p>
     <div class="src-grid" id="srcGrid"></div>
     <div class="conv-note" id="metaNotes"></div>
   </div>
@@ -2186,9 +2257,12 @@ let SPOT = [];          // 现货序列（升序）
 let LME = [];           // LME 序列（升序）
 let META = {};
 let CUR_RANGE = '1y';
-// 历史表分页：每页条数固定，当前页码由分页器维护。
+// 历史表分页：当前页码由分页器维护，每页条数可选（用户在分页器里切换）。
 // 原先的 TABLE_LIMIT 是「显示更多」累加式，点一次会把 5289 条全部铺开、页面滑不到底。
-const PAGE_SIZE = 30;
+// 默认 10 条：够短，手机上不用翻很久就能看到分页器与下方区块。
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 50];
+const DEFAULT_PAGE_SIZE = 10;
+let PAGE_SIZE = DEFAULT_PAGE_SIZE;
 let TABLE_PAGE = 1;
 let dataLoadFailed = false;
 let retryBtnAdded = false;
@@ -2736,6 +2810,10 @@ function renderTable() {
 
   renderPager(total, pageCount, start, shown.length);
 
+  // 同步选择器（programmatic 改 PAGE_SIZE 时也能跟上）
+  const sizeSel = document.getElementById('pgSize');
+  if (sizeSel && sizeSel.value !== String(PAGE_SIZE)) sizeSel.value = String(PAGE_SIZE);
+
   document.getElementById('tableSectionText').textContent =
     '历史交易日数据 · 第 ' + groupNum(TABLE_PAGE, 0) + ' / ' + groupNum(pageCount, 0) +
     ' 页 · 共 ' + groupNum(total, 0) + ' 条';
@@ -2750,7 +2828,8 @@ function renderPager(total, pageCount, start, shownCount) {
   const sum = document.getElementById('pgSummary');
   if (sum) {
     sum.textContent = '第 ' + groupNum(from, 0) + '~' + groupNum(to, 0) + ' 条 / 共 ' +
-      groupNum(total, 0) + ' 条 · 每页 ' + PAGE_SIZE + ' 条';
+      groupNum(total, 0) + ' 条 · 每页 ' + PAGE_SIZE + ' 条 · 共 ' +
+      groupNum(pageCount, 0) + ' 页';
   }
 
   const set = (id, disabled, fn) => {
@@ -2764,25 +2843,33 @@ function renderPager(total, pageCount, start, shownCount) {
   set('pgNext', cur >= pageCount, () => goPage(cur + 1));
   set('pgLast', cur >= pageCount, () => goPage(pageCount));
 
-  // 页码：首末页常驻，当前页左右各 1 页，其余用省略号占位。
-  // 窄屏（<640px）进一步收紧到「当前页 ±1」—— 加上首末页和两个省略号会撑到 7 个块，横向放不下。
+  // 页码：固定最多 7 块 —— 「首页 + 当前页±1 + 末页 + 最多两个省略号」。
+  // 之前桌面最多给到 7 个数字块，177 页时仍会铺成 1 … 4 5 6 … 177 这种偏长的条；
+  // 现在统一收紧：当前页离首/末页足够近时不放省略号，直接连号显示，条更短也更好点。
   const nums = document.getElementById('pgNums');
   if (nums) {
-    const narrow = window.innerWidth < 640;
     const pages = [];
-    if (pageCount <= (narrow ? 5 : 7)) {
-      for (let i = 1; i <= pageCount; i++) pages.push(i);
-    } else if (narrow) {
-      if (cur > 2) pages.push('…');
-      for (let i = Math.max(1, cur - 1); i <= Math.min(pageCount, cur + 1); i++) pages.push(i);
-      if (cur < pageCount - 1) pages.push('…');
-    } else {
+    const WINDOW = 1;                       // 当前页左右各留 1 页
+    const lo = Math.max(1, cur - WINDOW);
+    const hi = Math.min(pageCount, cur + WINDOW);
+    const showFirst = lo > 1;
+    const showLast = hi < pageCount;
+
+    if (showFirst) {
       pages.push(1);
-      if (cur > 3) pages.push('…');
-      for (let i = Math.max(2, cur - 1); i <= Math.min(pageCount - 1, cur + 1); i++) pages.push(i);
-      if (cur < pageCount - 2) pages.push('…');
+      // 首页与 lo 之间只有 1 页被跳过时直接补出来，省掉一个省略号
+      if (lo > 2) pages.push('…');
+      else if (lo === 2) pages.push(2);
+    }
+    for (let i = lo; i <= hi; i++) {
+      if (!pages.includes(i)) pages.push(i);
+    }
+    if (showLast) {
+      if (pageCount - hi > 1) pages.push('…');
+      else if (pageCount - hi === 1) pages.push(pageCount);
       pages.push(pageCount);
     }
+
     nums.innerHTML = pages.map((p) => {
       if (p === '…') return '<span class="pg-gap">…</span>';
       const act = p === cur ? ' active' : '';
@@ -2797,10 +2884,12 @@ function renderPager(total, pageCount, start, shownCount) {
   const inp = document.getElementById('pgJumpInput');
   if (inp) {
     inp.max = String(pageCount);
-    inp.placeholder = '1-' + pageCount;
+    inp.placeholder = String(pageCount);
     // 只在用户没有正在输入时回填，否则会把光标里的内容冲掉
     if (document.activeElement !== inp) inp.value = '';
   }
+  const jmax = document.getElementById('pgJumpMax');
+  if (jmax) jmax.textContent = groupNum(pageCount, 0);
 }
 
 /* ---- 翻页：渲染 + 把表格顶部滚回视口（否则翻页后停在页面中段，看不到新内容） ---- */
@@ -2817,6 +2906,18 @@ function goPage(p) {
 }
 
 // ============ 数据源状态 ============
+// 每个数据源对应的「给人看的」官网入口（不是抓数用的 API 端点 —— 那些是 JSON/JS 挑战页，
+// 直接甩给用户只会看到一堆乱码）。
+// ⚠️ 键名必须与 data.json 的 sourceHealth 键严格一致（update_copper.py 里登记的中文名），
+// 对不上就退化为不可点击的普通卡片 —— 这是刻意的降级，不要改成模糊匹配。
+const SOURCE_HOME = {
+  '新浪K线':   'https://finance.sina.com.cn/futures/quotes/CU0.shtml',
+  '新浪实时':  'https://finance.sina.com.cn/futures/quotes/CU0.shtml',
+  '新浪LME':   'https://finance.sina.com.cn/futures/quotes/CAD.shtml',
+  '上期所':    'https://www.shfe.com.cn/',
+  '生意社现货': 'https://www.100ppi.com/mprice/plist-1-61-1.html',
+};
+
 function renderHealth(health) {
   const grid = document.getElementById('srcGrid');
   const tag = document.getElementById('healthTag');
@@ -2825,7 +2926,8 @@ function renderHealth(health) {
 
   if (!entries.length) {
     grid.innerHTML = '<div class="src-item"><span class="sdot" style="background:var(--sub)"></span>' +
-      '<div><div class="sn">本地/回退数据</div><div class="sd">当前展示的是内嵌回退数据，未读取到数据源健康报告</div></div></div>';
+      '<div><div class="sn-row"><span class="sn">本地/回退数据</span></div>' +
+      '<div class="sd">当前展示的是内嵌回退数据，未读取到数据源健康报告</div></div></div>';
     tag.textContent = '回退模式';
     return;
   }
@@ -2837,14 +2939,20 @@ function renderHealth(health) {
 
   grid.innerHTML = entries.map(([name, v]) => {
     const fails = v.consecutiveFailures || 0;
-    return `<div class="src-item${v.ok ? '' : ' bad'}">
-      <span class="sdot"></span>
-      <div>
-        <div class="sn">${name}${v.ok ? '' : '（异常）'}</div>
-        <div class="sd">${v.detail || '—'}</div>
-        ${fails >= 2 ? '<div class="sf">已连续失败 ' + fails + ' 天</div>' : ''}
-      </div>
-    </div>`;
+    const home = SOURCE_HOME[name];
+    const inner =
+      `<span class="sdot"></span>` +
+      `<div>` +
+        `<div class="sn-row"><span class="sn">${name}${v.ok ? '' : '（异常）'}</span>` +
+        (home ? `<svg class="sgo" aria-hidden="true"><use href="#i-external" /></svg>` : '') +
+        `</div>` +
+        `<div class="sd">${v.detail || '—'}</div>` +
+        (fails >= 2 ? '<div class="sf">已连续失败 ' + fails + ' 天</div>' : '') +
+      `</div>`;
+    const cls = 'src-item' + (v.ok ? '' : ' bad');
+    if (!home) return `<div class="${cls}">${inner}</div>`;
+    return `<a class="${cls}" href="${home}" target="_blank" rel="noopener noreferrer"` +
+           ` aria-label="${name} 官网（新窗口打开）">${inner}</a>`;
   }).join('');
 
   // meta 里的校验提示：基差、换月跳空等，原样透出，不藏
@@ -3386,9 +3494,8 @@ function showDataWarning() {
   retryBtnAdded = true;
 }
 
-// 「显示更多 / 收起」切换
 // ============ 历史表分页 ============
-// 页码按钮的 onclick 在 renderPager() 里逐次绑定，这里只处理跳转输入框（只需绑一次）。
+// 页码按钮的 onclick 在 renderPager() 里逐次绑定，这里处理跳转输入框与每页条数（各绑一次）。
 (function bindPagerJump() {
   const inp = document.getElementById('pgJumpInput');
   const go = document.getElementById('pgJumpGo');
@@ -3404,8 +3511,32 @@ function showDataWarning() {
     if (e.key === 'Enter') { e.preventDefault(); jump(); }
   });
 
-  // 窄屏/宽屏切换会改变页码块的排布密度（见 renderPager 里的 narrow 分支），
-  // 跨越 640px 断点时重绘一次。用 rAF 节流，避免拖拽窗口时狂重渲染。
+  // 每页条数切换：按「当前页第一条数据的日期」重新定位，而不是粗暴跳回第 1 页 ——
+  // 用户改每页条数时想继续看同一段时间，不是想被弹回最新。
+  const sel = document.getElementById('pgSize');
+  if (sel) {
+    // 选项由 PAGE_SIZE_OPTIONS 生成，避免 HTML 里另抄一份导致两边不同步
+    sel.innerHTML = PAGE_SIZE_OPTIONS.map(function (n) {
+      return '<option value="' + n + '">' + n + ' 条</option>';
+    }).join('');
+    sel.value = String(PAGE_SIZE);
+    sel.addEventListener('change', function () {
+      const size = parseInt(sel.value, 10);
+      if (!isFinite(size) || size <= 0 || size === PAGE_SIZE) return;
+      const rows = FUT.slice().reverse();
+      const anchor = rows[(TABLE_PAGE - 1) * PAGE_SIZE];   // 换页大小前的首行
+      PAGE_SIZE = size;
+      TABLE_PAGE = 1;
+      if (anchor) {
+        const idx = rows.findIndex((d) => d.date === anchor.date);
+        if (idx >= 0) TABLE_PAGE = Math.floor(idx / PAGE_SIZE) + 1;
+      }
+      renderTable();
+    });
+  }
+
+  // 窗口尺寸变化只需重绘（页码密度现在与屏宽无关，固定最多 7 块），
+  // 用 rAF 节流避免拖拽窗口时狂重渲染。
   let _pgResizePending = false;
   window.addEventListener('resize', function () {
     if (_pgResizePending) return;

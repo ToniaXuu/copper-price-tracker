@@ -279,6 +279,7 @@ SNAPSHOT = r"""(() => {
     costFirst: (function(){ const e = document.querySelector('#costBody td[data-kg]'); return e ? e.textContent : null; })(),
 
     tableRows: document.querySelectorAll('#tableBody tr').length,
+    pageSize: (typeof PAGE_SIZE !== 'undefined' ? PAGE_SIZE : -1),
 
     /* 布局间距实测：影响卡片区 → 历史数据标题、标题 → 表格 之间的真实像素间距。
        getBoundingClientRect 取的是视口坐标，两元素同时可见时差值即实际间距。 */
@@ -587,10 +588,14 @@ def main() -> int:
             ok(f"1280px 视口无横向溢出（scrollW={snap['scrollW']} innerW={snap['innerW']}）")
         else:
             no(f"1280px 视口横向溢出：scrollW={snap['scrollW']} > innerW={snap['innerW']}")
-        if snap["tableRows"] >= 20:
-            ok(f"历史表渲染 {snap['tableRows']} 行")
+        # 历史表行数应等于当前每页条数（默认 10，可由用户切到 20/30/50）。
+        # ⚠️ 别写死阈值 —— PAGE_SIZE 可变，写死会让「切 50 条」后误判。
+        if snap["tableRows"] == snap["pageSize"]:
+            ok(f"历史表渲染 {snap['tableRows']} 行（= 每页 {snap['pageSize']} 条）")
+        elif 0 < snap["tableRows"] <= snap["pageSize"]:
+            ok(f"历史表渲染 {snap['tableRows']} 行（≤ 每页 {snap['pageSize']} 条，末页余数）")
         else:
-            no(f"历史表仅 {snap['tableRows']} 行")
+            no(f"历史表行数 {snap['tableRows']} 与每页 {snap['pageSize']} 条不符")
         if snap["srcCards"] >= 4:
             ok(f"数据源状态卡 {snap['srcCards']} 个")
         else:
@@ -778,8 +783,10 @@ def main() -> int:
             wn(f"还原后为 {back['txt']!r}（{back['cls']!r}）")
 
         # H3 历史表分页（替代原「显示更多」累加式）
-        # 核心口径：每页固定 30 条、不得铺开全部；首页首行是最新交易日；末页条数正确；
+        # 核心口径：单页行数 == PAGE_SIZE、不得铺开全部；首页首行是最新交易日；末页条数正确；
         # 翻页按钮在边界禁用；跳转越界要夹紧而不是渲染空白页。
+        # ⚠️ 断言一律以页面上的 PAGE_SIZE 为准，不写死 30 —— 每页条数可由用户切换
+        #    （10/20/30/50），写死会让「切到 20 条」后全部假失败。
         pg = json.loads(cdp.js(r"""JSON.stringify({
           rows: document.querySelectorAll('#tableBody tr').length,
           totalRows: (typeof FUT!=='undefined' ? FUT.length : -1),
@@ -791,25 +798,33 @@ def main() -> int:
           nextDisabled: (document.getElementById('pgNext')||{}).disabled,
           lastDisabled: (document.getElementById('pgLast')||{}).disabled,
           inspect: (typeof TABLE_PAGE!=='undefined' ? TABLE_PAGE : null),
-          size: (typeof PAGE_SIZE!=='undefined' ? PAGE_SIZE : null)
+          size: (typeof PAGE_SIZE!=='undefined' ? PAGE_SIZE : null),
+          sizeOptions: [].map.call(document.querySelectorAll('#pgSize option'), function(o){return o.value;}),
+          sizeValue: (document.getElementById('pgSize')||{}).value || null,
+          jumpMax: (document.getElementById('pgJumpMax')||{}).textContent || null,
+          pageCount: (typeof FUT!=='undefined' ? Math.max(1, Math.ceil(FUT.length/PAGE_SIZE)) : -1)
         })"""))
-        n0 = pg["rows"]
-        print(f"  首页：行数 {n0} / 总数 {pg['totalRows']} · 页码块 {pg['nums']} · 激活 {pg['active']}")
+        n0, PS = pg["rows"], pg["size"]
+        print(f"  首页：行数 {n0} / 总数 {pg['totalRows']} / 每页 {PS} / 共 {pg['pageCount']} 页")
+        print(f"  页码块 {pg['nums']} · 激活 {pg['active']}")
         print(f"  摘要：{pg['summary']}")
-        if pg["size"] == 30 and n0 == 30:
-            ok(f"首页渲染 {n0} 行（PAGE_SIZE=30，未铺开全部 {pg['totalRows']} 条）")
+        if PS == n0 == 10:
+            ok(f"首页渲染 {n0} 行（默认每页 10 条，未铺开全部 {pg['totalRows']} 条）")
+        elif PS == n0:
+            wn(f"首页渲染 {n0} 行 == PAGE_SIZE {PS}（默认应为 10，可能被上一步改动）")
         else:
-            no(f"首页行数异常：{n0} 行（PAGE_SIZE={pg['size']}）")
+            no(f"首页行数异常：{n0} 行（PAGE_SIZE={PS}）")
         if n0 < pg["totalRows"]:
             ok("分页生效：单页行数 < 总条数（没有一次性全列出）")
         else:
             no(f"分页失效：单页 {n0} 行 == 总条数 {pg['totalRows']}，全部铺在页面上了")
         # ⚠️ 摘要里的数字走 groupNum() 千分位（"5,289"），不能拿裸值 "5289" 去搜。
         _tot_pretty = f"{pg['totalRows']:,}" if pg["totalRows"] >= 0 else ""
-        if "1~30" in pg["summary"] and _tot_pretty in pg["summary"]:
-            ok(f"摘要文案正确（第 1~30 条 / 共 {_tot_pretty} 条）")
+        _head = f"1~{PS}"
+        if _head in pg["summary"] and _tot_pretty in pg["summary"]:
+            ok(f"摘要文案正确（第 {_head} 条 / 共 {_tot_pretty} 条 · 每页 {PS} 条）")
         else:
-            wn(f"摘要文案可疑：{pg['summary']!r}（应在含 '1~30' 且含 {_tot_pretty!r}）")
+            wn(f"摘要文案可疑：{pg['summary']!r}（应含 {_head!r} 且含 {_tot_pretty!r}）")
         if pg["active"] == "1":
             ok("首页页码高亮在 1")
         else:
@@ -818,6 +833,13 @@ def main() -> int:
             ok("首页「首页/上一页」禁用、「下一页」可用（边界正确）")
         else:
             no(f"首页按钮状态异常：first={pg['firstDisabled']} prev={pg['prevDisabled']} next={pg['nextDisabled']}")
+        # 页码块必须收敛（固定最多 7 块）—— 177 页时若铺成几十个块就说明收敛逻辑失效
+        if pg["pageCount"] > 7 and len(pg["nums"]) <= 7:
+            ok(f"页码块收敛为 {len(pg['nums'])} 个（共 {pg['pageCount']} 页，未铺满）")
+        elif pg["pageCount"] <= 7:
+            ok(f"页码块 {len(pg['nums'])} 个（总页数 ≤ 7，全列出）")
+        else:
+            no(f"页码块未收敛：{len(pg['nums'])} 个（共 {pg['pageCount']} 页，期望 ≤7）")
 
         # 首页首行必须是全量数据里最新的一天（倒序渲染）
         r0 = json.loads(cdp.js("""JSON.stringify({
@@ -831,7 +853,7 @@ def main() -> int:
         else:
             no(f"首页首行 {r0['first']!r} ≠ 最新日 {r0['lastDate']!r}")
 
-        # 翻到第 2 页
+        # 翻到第 2 页（区间随 PAGE_SIZE 变化：每页 10 → 11~20）
         cdp.js("document.getElementById('pgNext').click()")
         time.sleep(0.5)
         p2 = json.loads(cdp.js("""JSON.stringify({
@@ -842,14 +864,15 @@ def main() -> int:
           prevDisabled:(document.getElementById('pgPrev')||{}).disabled
         })"""))
         print(f"  第 2 页：page={p2['page']} 行数={p2['rows']} 摘要={p2['summary']!r}")
-        if p2["page"] == 2 and p2["rows"] == 30 and p2["active"] == "2" and not p2["prevDisabled"]:
-            ok("「下一页」→ 第 2 页，30 行，高亮跟随，上一页解禁")
+        if p2["page"] == 2 and p2["rows"] == PS and p2["active"] == "2" and not p2["prevDisabled"]:
+            ok(f"「下一页」→ 第 2 页，{PS} 行，高亮跟随，上一页解禁")
         else:
             no(f"翻页异常：{p2}")
-        if "31~60" in p2["summary"]:
-            ok("第 2 页摘要区间正确（31~60）")
+        _r2 = f"{PS + 1}~{PS * 2}"
+        if _r2 in p2["summary"]:
+            ok(f"第 2 页摘要区间正确（{_r2}）")
         else:
-            wn(f"第 2 页摘要可疑：{p2['summary']!r}")
+            wn(f"第 2 页摘要可疑：{p2['summary']!r}（应含 {_r2!r}）")
 
         # 跳到末页：行数应为余数，且末页/下一页禁用
         cdp.js("document.getElementById('pgLast').click()")
@@ -858,18 +881,18 @@ def main() -> int:
           rows: document.querySelectorAll('#tableBody tr').length,
           page: TABLE_PAGE,
           pageCount: Math.ceil(FUT.length/PAGE_SIZE),
+          pageSize: PAGE_SIZE,
           nextDisabled:(document.getElementById('pgNext')||{}).disabled,
           lastDisabled:(document.getElementById('pgLast')||{}).disabled,
           summary:(document.getElementById('pgSummary')||{}).textContent||''
         })"""))
-        expect_last = pl["rows"] if pl["pageCount"] else 0
         print(f"  末页：page={pl['page']}/{pl['pageCount']} 行数={pl['rows']} 摘要={pl['summary']!r}")
         if pl["page"] == pl["pageCount"] and pl["nextDisabled"] and pl["lastDisabled"]:
             ok(f"跳至末页（第 {pl['page']} 页），「下一页/末页」正确禁用")
         else:
             no(f"末页异常：{pl}")
-        if pl["rows"] == 30 or (0 < pl["rows"] <= 30):
-            ok(f"末页 {pl['rows']} 行（≤ 每页 30 条，余数正确）")
+        if 0 < pl["rows"] <= pl["pageSize"]:
+            ok(f"末页 {pl['rows']} 行（≤ 每页 {pl['pageSize']} 条，余数正确）")
         else:
             no(f"末页行数异常：{pl['rows']}")
 
@@ -885,16 +908,77 @@ def main() -> int:
         else:
             no(f"越界跳转未夹紧：{pv}")
 
-        # 回首页后确认仍是 30 行（不残留）
+        # 回首页后行数应恢复为 PAGE_SIZE（不残留）
         cdp.js("goPage(1)")
         time.sleep(0.5)
         n_back = cdp.js("document.querySelectorAll('#tableBody tr').length")
-        if n_back == 30:
-            ok("回到第 1 页恢复 30 行（无残留）")
+        if n_back == PS:
+            ok(f"回到第 1 页恢复 {PS} 行（无残留）")
         else:
-            no(f"回首页后行数异常：{n_back}")
+            no(f"回首页后行数异常：{n_back}（期望 {PS}）")
+
+        # ---- H3b 每页条数选择器 ----
+        # 需求：页码太多 → 提供 10/20/30/50 每页条数选项，缩短页码数量。
+        print("\n-- H3b. 每页条数选择器 --")
+        if pg["sizeOptions"] == ["10", "20", "30", "50"]:
+            ok(f"选择器选项 = {pg['sizeOptions']}（与 PAGE_SIZE_OPTIONS 一致）")
+        else:
+            no(f"选择器选项异常：{pg['sizeOptions']}（期望 ['10','20','30','50']）")
+        if pg["sizeValue"] == "10":
+            ok("选择器默认值 = 10 条（与 DEFAULT_PAGE_SIZE 一致）")
+        else:
+            no(f"选择器默认值异常：{pg['sizeValue']!r}（期望 '10'）")
+        if pg["jumpMax"] and pg["jumpMax"].replace(",", "") == str(pg["pageCount"]):
+            ok(f"跳转框显示总页数 {pg['jumpMax']}（= 每页 {PS} 条时共 {pg['pageCount']} 页）")
+        else:
+            wn(f"跳转框上限显示 {pg['jumpMax']!r}（期望 {pg['pageCount']}）")
+
+        # 切到「50 条/页」：总页数应缩短，且首行日期保持不变（不跳回最新）
+        before_first = cdp.js("document.querySelector('#tableBody tr td strong').textContent.trim()")
+        cdp.js("(function(){var s=document.getElementById('pgSize');s.value='50';"
+               "s.dispatchEvent(new Event('change',{bubbles:true}));})()")
+        time.sleep(0.6)
+        s50 = json.loads(cdp.js("""JSON.stringify({
+          size: PAGE_SIZE,
+          page: TABLE_PAGE,
+          rows: document.querySelectorAll('#tableBody tr').length,
+          pageCount: Math.ceil(FUT.length/PAGE_SIZE),
+          first: document.querySelector('#tableBody tr td strong').textContent.trim(),
+          summary:(document.getElementById('pgSummary')||{}).textContent||''
+        })"""))
+        print(f"  切到 50 条/页 → page={s50['page']}/{s50['pageCount']} 行数={s50['rows']} "
+              f"首行={s50['first']!r}")
+        if s50["size"] == 50 and s50["rows"] == 50 and s50["page"] == 1:
+            ok(f"切换为 50 条/页生效：单页 50 行，总页数缩短至 {s50['pageCount']}")
+        else:
+            no(f"切换每页条数失败：{s50}")
+        if s50["pageCount"] < pg["pageCount"]:
+            ok(f"页数随每页条数增大而缩短（{pg['pageCount']} → {s50['pageCount']} 页）")
+        else:
+            no(f"页数未缩短：{pg['pageCount']} → {s50['pageCount']}")
+        if s50["first"] == before_first:
+            ok(f"切换后首行日期保持 {s50['first']!r}（按当前页锚定，未跳回最新）")
+        else:
+            wn(f"切换后首行从 {before_first!r} 变为 {s50['first']!r}")
+
+        # 还原为默认 10 条/页，避免影响后续断言
+        cdp.js("(function(){var s=document.getElementById('pgSize');s.value='10';"
+               "s.dispatchEvent(new Event('change',{bubbles:true}));})()")
+        time.sleep(0.5)
+        _restored = cdp.js("PAGE_SIZE")
+        if _restored == 10:
+            ok("每页条数已还原为默认 10 条/页")
+        else:
+            wn(f"还原后 PAGE_SIZE={_restored}")
 
         # H4 全源失效 → 红色告警（验收标准「全源失效红」）
+        # ⚠️ 先存一份真实卡片的 HTML 快照，测完原样回填 —— 比「重新调 renderHealth」
+        # 可靠：raw 是 init 里的局部变量，页面全局取不到；用假键名还原又会把真实源
+        # 列表整个换掉，害得后面所有依赖真实源名的断言失效（这两个坑都踩过）。
+        real_grid_html = cdp.js("document.getElementById('srcGrid').innerHTML")
+        real_tag_text = cdp.js("document.getElementById('healthTag').textContent")
+        real_tag_color = cdp.js("document.getElementById('healthTag').style.color")
+        real_tag_border = cdp.js("document.getElementById('healthTag').style.borderColor")
         fail_health = {k: {"ok": False, "detail": "探针构造：连接超时"} for k in
                        ("sina_kline", "shfe", "spot_100ppi", "lme_kline", "sina_realtime")}
         cdp.js("renderHealth(" + json.dumps(fail_health, ensure_ascii=False) + ")")
@@ -915,17 +999,76 @@ def main() -> int:
             ok("5 张数据源卡全部标记为异常")
         else:
             no(f"异常卡数量 {r['bad']}（期望 5）")
-        # 还原
-        cdp.js("renderHealth(" + json.dumps({
-            k: {"ok": True, "detail": "探针还原"} for k in
-            ("sina_kline", "shfe", "spot_100ppi", "lme_kline", "sina_realtime")
-        }, ensure_ascii=False) + ")")
+        # 还原：直接把构造前的真实卡片 HTML + 标签状态回填
+        cdp.js("(function(h,t,c,b){"
+               "document.getElementById('srcGrid').innerHTML=h;"
+               "var g=document.getElementById('healthTag');"
+               "g.textContent=t; g.style.color=c; g.style.borderColor=b;})("
+               + json.dumps(real_grid_html or "") + ","
+               + json.dumps(real_tag_text or "") + ","
+               + json.dumps(real_tag_color or "") + ","
+               + json.dumps(real_tag_border or "") + ")")
         time.sleep(0.3)
         r2 = cdp.js("document.getElementById('healthTag').textContent")
         if "正常" in (r2 or ""):
             ok("健康标签已还原为「全部正常」")
         else:
             wn(f"还原后标签：{r2!r}")
+
+        # ---------------- H4b 数据源卡片可点击跳转官网 ----------------
+        # 需求：列出的每个数据源都要能点击跳转。
+        # 断言四件事：① 5 张卡都是 <a> ② 都指向 https 外链 ③ 都带 target=_blank + rel=noopener
+        #              ④ SOURCE_HOME 映射覆盖全部真实源名（否则静默退化为不可点击 div）
+        print("\n-- H4b. 数据源卡片可点击跳转 --")
+        # 从页面里读 SOURCE_HOME 的键集合 —— 不在这里另抄一份，避免映射表改了两边不同步。
+        SOURCE_HOME_KEYS = set(json.loads(
+            cdp.js("JSON.stringify(Object.keys(SOURCE_HOME || {}))") or "[]"))
+        src_cards = json.loads(cdp.js("""JSON.stringify(
+          Array.from(document.querySelectorAll('#srcGrid .src-item')).map(function(el){
+            return {
+              tag: el.tagName,
+              name: (el.querySelector('.sn')||{}).textContent||'',
+              href: el.getAttribute('href')||'',
+              target: el.getAttribute('target')||'',
+              rel: el.getAttribute('rel')||'',
+              hasArrow: !!el.querySelector('.sgo')
+            };
+          }))""")) or []
+        print(f"  数据源卡 {len(src_cards)} 张：")
+        for c in src_cards:
+            print(f"    <{c['tag'].lower()}> {c['name']:<12} → {c['href']}")
+        if len(src_cards) >= 5:
+            ok(f"数据源卡 {len(src_cards)} 张（与 data.json 的 sourceHealth 条目数一致）")
+        else:
+            no(f"数据源卡仅 {len(src_cards)} 张（期望 ≥5）")
+        not_link = [c["name"] for c in src_cards if c["tag"] != "A"]
+        if not not_link:
+            ok("5 张卡全部渲染为 <a>（可点击）")
+        else:
+            no(f"以下数据源不可点击（仍是 div）：{not_link}")
+        bad_href = [c["name"] for c in src_cards if not c["href"].startswith("https://")]
+        if not bad_href:
+            ok("全部指向 https 外链官网")
+        else:
+            no(f"以下数据源 href 不是 https 外链：{bad_href}")
+        bad_attr = [c["name"] for c in src_cards
+                    if c["tag"] == "A" and (c["target"] != "_blank" or "noopener" not in c["rel"])]
+        if not bad_attr:
+            ok("全部带 target=_blank + rel=noopener noreferrer（新窗口打开且防 window.opener 劫持）")
+        else:
+            no(f"以下数据源缺 target/rel 保护：{bad_attr}")
+        no_arrow = [c["name"] for c in src_cards if c["tag"] == "A" and not c["hasArrow"]]
+        if not no_arrow:
+            ok("可点击的卡片均带外链箭头图标（视觉上明示可跳转）")
+        else:
+            wn(f"以下卡片缺外链箭头：{no_arrow}")
+        # 映射完整性：每个真实源名都必须命中 SOURCE_HOME，否则会静默退化为不可点击
+        unmapped = [c["name"] for c in src_cards
+                    if c["name"].replace("（异常）", "") not in SOURCE_HOME_KEYS]
+        if not unmapped:
+            ok(f"SOURCE_HOME 映射覆盖全部真实数据源键名（{len(SOURCE_HOME_KEYS)} 条，无静默降级）")
+        else:
+            no(f"以下数据源在 SOURCE_HOME 里没有映射，会退化为不可点击：{unmapped}")
 
         # ---------------- H5 锚点导航落点 ----------------
         # 回归背景（实测踩过，用户反馈「手机端导航锚点钉不上去」）：

@@ -262,16 +262,26 @@ def check_assets() -> None:
             continue
         html = read(path)
 
+        # ⚠️ 必须先剥掉内联 <script> 块再扫 href/src：
+        # 否则 JS 模板字符串（如 renderHealth 里的 `<a href="${home}">`）会被误当 HTML
+        # 属性抓出来，报「${home} → 文件不存在」假失败。脚本里的字符串不是 DOM 属性，
+        # 由浏览器在运行时才拼进 DOM —— 静态阶段无从校验，也不该校验。
+        html_dom = re.sub(r"<script(?![^>]*\bsrc=)[^>]*>.*?</script>", "", html, flags=re.S | re.I)
+
         refs: set[str] = set()
-        refs |= set(re.findall(r'<link[^>]+href\s*=\s*["\']([^"\']+)["\']', html, re.I))
-        refs |= set(re.findall(r'<script[^>]+src\s*=\s*["\']([^"\']+)["\']', html, re.I))
-        refs |= set(re.findall(r'<img[^>]+src\s*=\s*["\']([^"\']+)["\']', html, re.I))
-        refs |= set(re.findall(r'<a[^>]+href\s*=\s*["\']([^"\']+)["\']', html, re.I))
-        refs |= set(re.findall(r'["\'](\.?\.?/[\w./-]+\.(?:js|css|png|svg|json|ico|webp|html))["\']', html, re.I))
+        refs |= set(re.findall(r'<link[^>]+href\s*=\s*["\']([^"\']+)["\']', html_dom, re.I))
+        refs |= set(re.findall(r'<script[^>]+src\s*=\s*["\']([^"\']+)["\']', html_dom, re.I))
+        refs |= set(re.findall(r'<img[^>]+src\s*=\s*["\']([^"\']+)["\']', html_dom, re.I))
+        refs |= set(re.findall(r'<a[^>]+href\s*=\s*["\']([^"\']+)["\']', html_dom, re.I))
+        refs |= set(re.findall(r'["\'](\.?\.?/[\w./-]+\.(?:js|css|png|svg|json|ico|webp|html))["\']', html_dom, re.I))
 
         local = []
         for r in refs:
             if r.startswith(("http://", "https://", "//", "data:", "#", "mailto:")):
+                continue
+            if "${" in r or "{{" in r:      # 模板表达式（双保险，正常已被上面剥掉）
+                continue
+            if not re.match(r"^[\w./%-]+$", r):   # 含空格/花括号等非路径字符，跳过
                 continue
             local.append(r)
         if not local:

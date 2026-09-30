@@ -14,7 +14,7 @@
 //
 // v2：新增 releases.json（同为网络优先）；并注意 —— 改动 index.html 后必须升版本号，
 // 因为页面本身走缓存优先，不升版本老访客会一直拿到旧页面。
-const CACHE_NAME = 'copper-price-tracker-v5';
+const CACHE_NAME = 'copper-price-tracker-v7';
 const CORE_ASSETS = [
   './',
   './index.html',
