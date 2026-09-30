@@ -777,19 +777,122 @@ def main() -> int:
         else:
             wn(f"还原后为 {back['txt']!r}（{back['cls']!r}）")
 
-        # H3 表格展开 / 收起
-        n0 = cdp.js("document.querySelectorAll('#tableBody tr').length")
-        cdp.js("document.getElementById('tableMore').click()")
-        time.sleep(0.8)
-        n1 = cdp.js("document.querySelectorAll('#tableBody tr').length")
-        cdp.js("document.getElementById('tableMore').click()")
-        time.sleep(0.5)
-        n2 = cdp.js("document.querySelectorAll('#tableBody tr').length")
-        print(f"  历史表行数：初始 {n0} → 展开 {n1} → 收起 {n2}")
-        if n0 == 30 and n1 == 5289 and n2 == 30:
-            ok("「显示更多 / 收起」双向正常（30 ↔ 5289）")
+        # H3 历史表分页（替代原「显示更多」累加式）
+        # 核心口径：每页固定 30 条、不得铺开全部；首页首行是最新交易日；末页条数正确；
+        # 翻页按钮在边界禁用；跳转越界要夹紧而不是渲染空白页。
+        pg = json.loads(cdp.js(r"""JSON.stringify({
+          rows: document.querySelectorAll('#tableBody tr').length,
+          totalRows: (typeof FUT!=='undefined' ? FUT.length : -1),
+          summary: (document.getElementById('pgSummary')||{}).textContent || '',
+          nums: [].map.call(document.querySelectorAll('#pgNums .pg-num'), function(e){return e.textContent.trim();}),
+          active: (function(){var a=document.querySelector('#pgNums .pg-num.active');return a?a.textContent.trim():null;})(),
+          firstDisabled: (document.getElementById('pgFirst')||{}).disabled,
+          prevDisabled: (document.getElementById('pgPrev')||{}).disabled,
+          nextDisabled: (document.getElementById('pgNext')||{}).disabled,
+          lastDisabled: (document.getElementById('pgLast')||{}).disabled,
+          inspect: (typeof TABLE_PAGE!=='undefined' ? TABLE_PAGE : null),
+          size: (typeof PAGE_SIZE!=='undefined' ? PAGE_SIZE : null)
+        })"""))
+        n0 = pg["rows"]
+        print(f"  首页：行数 {n0} / 总数 {pg['totalRows']} · 页码块 {pg['nums']} · 激活 {pg['active']}")
+        print(f"  摘要：{pg['summary']}")
+        if pg["size"] == 30 and n0 == 30:
+            ok(f"首页渲染 {n0} 行（PAGE_SIZE=30，未铺开全部 {pg['totalRows']} 条）")
         else:
-            no(f"表格展开异常：{n0} → {n1} → {n2}")
+            no(f"首页行数异常：{n0} 行（PAGE_SIZE={pg['size']}）")
+        if n0 < pg["totalRows"]:
+            ok("分页生效：单页行数 < 总条数（没有一次性全列出）")
+        else:
+            no(f"分页失效：单页 {n0} 行 == 总条数 {pg['totalRows']}，全部铺在页面上了")
+        # ⚠️ 摘要里的数字走 groupNum() 千分位（"5,289"），不能拿裸值 "5289" 去搜。
+        _tot_pretty = f"{pg['totalRows']:,}" if pg["totalRows"] >= 0 else ""
+        if "1~30" in pg["summary"] and _tot_pretty in pg["summary"]:
+            ok(f"摘要文案正确（第 1~30 条 / 共 {_tot_pretty} 条）")
+        else:
+            wn(f"摘要文案可疑：{pg['summary']!r}（应在含 '1~30' 且含 {_tot_pretty!r}）")
+        if pg["active"] == "1":
+            ok("首页页码高亮在 1")
+        else:
+            no(f"首页页码高亮异常：{pg['active']!r}")
+        if pg["firstDisabled"] and pg["prevDisabled"] and not pg["nextDisabled"]:
+            ok("首页「首页/上一页」禁用、「下一页」可用（边界正确）")
+        else:
+            no(f"首页按钮状态异常：first={pg['firstDisabled']} prev={pg['prevDisabled']} next={pg['nextDisabled']}")
+
+        # 首页首行必须是全量数据里最新的一天（倒序渲染）
+        r0 = json.loads(cdp.js("""JSON.stringify({
+          first: document.querySelector('#tableBody tr td strong').textContent.trim(),
+          lastDate: (typeof FUT!=='undefined' && FUT.length ? (function(){
+            var d=FUT[FUT.length-1].date.split('-');return d[1]*1+'月'+d[2]*1+'日';})() : null)
+        })"""))
+        print(f"  首页首行 {r0['first']!r} / 数据最新日 {r0['lastDate']!r}")
+        if r0["first"] == r0["lastDate"]:
+            ok("首页首行 = 最新交易日（倒序渲染正确）")
+        else:
+            no(f"首页首行 {r0['first']!r} ≠ 最新日 {r0['lastDate']!r}")
+
+        # 翻到第 2 页
+        cdp.js("document.getElementById('pgNext').click()")
+        time.sleep(0.5)
+        p2 = json.loads(cdp.js("""JSON.stringify({
+          rows: document.querySelectorAll('#tableBody tr').length,
+          page: (typeof TABLE_PAGE!=='undefined'?TABLE_PAGE:null),
+          active: (function(){var a=document.querySelector('#pgNums .pg-num.active');return a?a.textContent.trim():null;})(),
+          summary:(document.getElementById('pgSummary')||{}).textContent||'',
+          prevDisabled:(document.getElementById('pgPrev')||{}).disabled
+        })"""))
+        print(f"  第 2 页：page={p2['page']} 行数={p2['rows']} 摘要={p2['summary']!r}")
+        if p2["page"] == 2 and p2["rows"] == 30 and p2["active"] == "2" and not p2["prevDisabled"]:
+            ok("「下一页」→ 第 2 页，30 行，高亮跟随，上一页解禁")
+        else:
+            no(f"翻页异常：{p2}")
+        if "31~60" in p2["summary"]:
+            ok("第 2 页摘要区间正确（31~60）")
+        else:
+            wn(f"第 2 页摘要可疑：{p2['summary']!r}")
+
+        # 跳到末页：行数应为余数，且末页/下一页禁用
+        cdp.js("document.getElementById('pgLast').click()")
+        time.sleep(0.6)
+        pl = json.loads(cdp.js("""JSON.stringify({
+          rows: document.querySelectorAll('#tableBody tr').length,
+          page: TABLE_PAGE,
+          pageCount: Math.ceil(FUT.length/PAGE_SIZE),
+          nextDisabled:(document.getElementById('pgNext')||{}).disabled,
+          lastDisabled:(document.getElementById('pgLast')||{}).disabled,
+          summary:(document.getElementById('pgSummary')||{}).textContent||''
+        })"""))
+        expect_last = pl["rows"] if pl["pageCount"] else 0
+        print(f"  末页：page={pl['page']}/{pl['pageCount']} 行数={pl['rows']} 摘要={pl['summary']!r}")
+        if pl["page"] == pl["pageCount"] and pl["nextDisabled"] and pl["lastDisabled"]:
+            ok(f"跳至末页（第 {pl['page']} 页），「下一页/末页」正确禁用")
+        else:
+            no(f"末页异常：{pl}")
+        if pl["rows"] == 30 or (0 < pl["rows"] <= 30):
+            ok(f"末页 {pl['rows']} 行（≤ 每页 30 条，余数正确）")
+        else:
+            no(f"末页行数异常：{pl['rows']}")
+
+        # 越界跳转必须夹紧，不能渲染空白表格
+        cdp.js("goPage(99999)")
+        time.sleep(0.5)
+        pv = json.loads(cdp.js("""JSON.stringify({
+          page: TABLE_PAGE, rows: document.querySelectorAll('#tableBody tr').length,
+          pageCount: Math.ceil(FUT.length/PAGE_SIZE)
+        })"""))
+        if pv["page"] == pv["pageCount"] and pv["rows"] > 0:
+            ok(f"越界跳转被夹紧到末页（请求 99999 → 实际 {pv['page']}），表格非空")
+        else:
+            no(f"越界跳转未夹紧：{pv}")
+
+        # 回首页后确认仍是 30 行（不残留）
+        cdp.js("goPage(1)")
+        time.sleep(0.5)
+        n_back = cdp.js("document.querySelectorAll('#tableBody tr').length")
+        if n_back == 30:
+            ok("回到第 1 页恢复 30 行（无残留）")
+        else:
+            no(f"回首页后行数异常：{n_back}")
 
         # H4 全源失效 → 红色告警（验收标准「全源失效红」）
         fail_health = {k: {"ok": False, "detail": "探针构造：连接超时"} for k in
@@ -823,6 +926,62 @@ def main() -> int:
             ok("健康标签已还原为「全部正常」")
         else:
             wn(f"还原后标签：{r2!r}")
+
+        # ---------------- H5 锚点导航落点 ----------------
+        # 回归背景（实测踩过，用户反馈「手机端导航锚点钉不上去」）：
+        #   .reveal 未进视口时带 transform:translateY(36px)。原生锚点按「带 transform 的
+        #   位置」算落点 → 少滚 36px；紧接着 reveal 动画把内容上移 36px → 标题被吸顶导航
+        #   （约 47~54px 高）压住。实测 390px 下 #sec-history 标题 top=43px < 导航底边 47px。
+        #   修法：点击时先 settleReveals() 归位，再自行 scrollTo 精确落点，收尾补校正。
+        print("\n== H5. 锚点导航落点（标题必须落在吸顶导航下方） ==")
+        anchor_ids = ["sec-changes", "sec-trend", "sec-position", "sec-cross",
+                      "sec-converter", "sec-impact", "sec-history", "sec-health"]
+        anchor_bad = []
+        anchor_clears = []
+        for aid in anchor_ids:
+            cdp.js(f"document.querySelector('a.pn-link[href=\"#{aid}\"]').click()")
+            # ⚠️ 双重等待：① 滚动停止 ② 目标 transform 完全归位。
+            # 只等 transform → 会量到「滚动途中」的假阴性（实测 titleTop=2138）；
+            # 只等固定时长 → 会量到 transform 未归零的假阳性（实测 clear=-22px）。
+            prev_y, stable = -1, 0
+            for _ in range(60):
+                time.sleep(0.15)
+                st = json.loads(cdp.js(
+                    "JSON.stringify((function(){var el=document.getElementById(%r);"
+                    "var t=el.querySelector('.section-title')||el;"
+                    "var tf=getComputedStyle(t).transform;"
+                    "return [Math.round(window.pageYOffset),"
+                    "(tf==='none'||tf==='matrix(1, 0, 0, 1, 0, 0)')?1:0];})())" % aid))
+                if st[0] == prev_y and st[1]:
+                    stable += 1
+                    if stable >= 3:
+                        break
+                else:
+                    stable = 0
+                prev_y = st[0]
+            a = json.loads(cdp.js("""JSON.stringify((function(){
+              var nav=document.getElementById('pageNav');
+              var el=document.getElementById(%r);
+              var t=el.querySelector('.section-title')||el;
+              var tt=Math.round(t.getBoundingClientRect().top);
+              var nb=Math.round(nav.getBoundingClientRect().bottom);
+              return {id:%r, titleTop:tt, navBottom:nb, clear:tt-nb,
+                      opacity:getComputedStyle(el).opacity};
+            })())""" % (aid, json.dumps(aid))))
+            mark = "OK " if a["clear"] >= 6 else "BAD"
+            print(f"  [{mark}] {a['id']:<16} titleTop={a['titleTop']:>4} "
+                  f"navBottom={a['navBottom']:>3} clear={a['clear']:>4} opacity={a['opacity']}")
+            anchor_clears.append(a["clear"])
+            if a["clear"] < 6 or float(a["opacity"]) < 0.99:
+                anchor_bad.append(a)
+        if not anchor_bad:
+            ok(f"{len(anchor_ids)} 个锚点全部落在吸顶导航下方"
+               f"（最小净空 {min(anchor_clears)}px，最大 {max(anchor_clears)}px）")
+        else:
+            no(f"锚点落点异常（被导航压住）：{anchor_bad}")
+        # 复位到页面顶部，避免影响后续断言
+        cdp.js("window.scrollTo(0, 0)")
+        time.sleep(0.4)
 
         # ---------------- G 运行时报错 ----------------
         print("\n== G. 运行时报错 ==")

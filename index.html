@@ -791,15 +791,68 @@
     .badge.up   { background: var(--red-light);  color: var(--up-text); }
     .badge.down { background: var(--green-light); color: var(--down-text); }
     .badge.flat { background: var(--amber-light); color: var(--flat-fg); }
-    .table-more {
-      display: block; width: 100%; margin-top: 16px;
-      padding: 11px; border-radius: var(--radius-sm);
-      border: 1.5px dashed var(--border);
-      background: transparent; color: var(--sub);
+
+    /* ===== 历史表分页器 =====
+       替代原先的「显示更多」累加展开：5289 条全铺开时页面根本滑不到底。
+       布局：上行「第 x/y 页 · 第 a~b 条 / 共 n 条」，下行页码控件 + 跳转。 */
+    .pager {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: 12px; margin-top: 18px; padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .pg-summary { font-size: 12.5px; color: var(--sub); font-variant-numeric: tabular-nums; }
+    .pg-ctrl { display: flex; align-items: center; gap: 4px; }
+    .pg-btn {
+      min-width: 34px; height: 34px; padding: 0 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--card); color: var(--sub);
+      font-family: inherit; font-size: 14px; font-weight: 700; line-height: 1;
+      cursor: pointer; transition: var(--transition);
+      font-variant-numeric: tabular-nums;
+    }
+    .pg-btn:hover:not(:disabled) {
+      border-color: var(--ser-futures); color: var(--primary-strong);
+      background: var(--primary-soft);
+    }
+    .pg-btn:disabled { opacity: .38; cursor: not-allowed; }
+    .pg-nums { display: flex; align-items: center; gap: 4px; margin: 0 2px; }
+    .pg-num {
+      min-width: 34px; height: 34px; padding: 0 8px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--card); color: var(--sub);
       font-family: inherit; font-size: 13px; font-weight: 700;
       cursor: pointer; transition: var(--transition);
+      font-variant-numeric: tabular-nums;
     }
-    .table-more:hover { border-color: var(--ser-futures); color: var(--primary-strong); background: var(--primary-soft); }
+    .pg-num:hover { border-color: var(--ser-futures); color: var(--primary-strong); background: var(--primary-soft); }
+    .pg-num.active {
+      background: var(--ser-futures); border-color: var(--ser-futures);
+      color: #fff; cursor: default;
+    }
+    .pg-gap {
+      min-width: 20px; text-align: center; color: var(--sub);
+      font-size: 13px; letter-spacing: .06em; user-select: none;
+    }
+    .pg-jump {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12.5px; color: var(--sub);
+    }
+    .pg-input {
+      width: 62px; height: 34px; padding: 0 8px;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--card); color: var(--text);
+      font-family: inherit; font-size: 13px; text-align: center;
+      font-variant-numeric: tabular-nums;
+      transition: var(--transition);
+    }
+    .pg-input:focus { outline: none; border-color: var(--ser-futures); box-shadow: 0 0 0 3px var(--primary-soft); }
+    /* 数字输入框的上下箭头在 34px 高度下会撑破布局，隐掉 */
+    .pg-input::-webkit-outer-spin-button,
+    .pg-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .pg-input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+    .pg-go { min-width: 42px; }
 
     /* ===== 数据源状态 ===== */
     .src-grid {
@@ -1031,19 +1084,40 @@
       backdrop-filter: blur(14px) saturate(1.5);
       border-bottom: 1px solid var(--border);
       transition: box-shadow .25s ease;
+      /* 让 .pn-inner（可横滚）与 .pn-tail（固定右侧插槽）并排；
+         .pn-inner 是 max-width:1160px 居中，故需外层再包一个居中约束。 */
+      display: flex; align-items: center; justify-content: center;
     }
+    /* 导航右侧固定插槽：窄屏时主题切换器被挪进这里，不随导航横滚、不遮导航项。 */
+    .pn-tail { flex: 0 0 auto; display: none; align-items: center; }
+    .pn-tail > .theme-switch { position: static; }
     .page-nav.stuck { box-shadow: 0 6px 22px rgba(60,40,20,.10); }
     /* 导航吸顶后，fixed 的主题切换器会与导航条右上角重叠（两者都在 top:0 附近，
        切换器 z-index 1000 > 导航 900）。给它让位，下移到导航条之下。
        用 :has() 是因为 .theme-switch 是 .page-nav 的前置兄弟，无法用 ~ 反向选择。 */
     body:has(.page-nav.stuck) .theme-switch { top: 58px; }
     body:has(.page-nav.stuck) .back-top { bottom: 18px; }
+    /* 窄屏：切换器不再悬浮盖住数据，而是"贴"到吸顶导航条右侧，视觉上成为导航的一部分。
+       —— fixed 元素必然遮挡下方内容，手机上这个遮挡很碍事（实测会盖住历史表数值列）。 */
+    @media (max-width: 640px) {
+      /* 窄屏：启用导航右侧插槽，主题切换器（由 JS 挪入）固定在此，
+         不再以 fixed 悬浮遮挡下方数据列。 */
+      .pn-tail { display: flex; padding-right: 10px; }
+      .pn-tail > .theme-switch {
+        padding: 1px; gap: 0;
+        background: transparent; border-color: transparent;
+        -webkit-backdrop-filter: none; backdrop-filter: none;
+      }
+    }
     .pn-inner {
       max-width: 1160px; margin: 0 auto;
       padding: 9px 20px;
       display: flex; align-items: center; gap: 6px;
       overflow-x: auto; overflow-y: hidden;
       scrollbar-width: none;
+      /* 在 .page-nav 的 flex 行里撑满剩余宽度；min-width:0 是横滚容器的必要条件
+         （否则 flex item 默认 min-width:auto 会被内容撑开、overflow 失效）。 */
+      flex: 1 1 auto; min-width: 0;
     }
     .pn-inner::-webkit-scrollbar { height: 0; }
     .pn-link {
@@ -1111,8 +1185,15 @@
       .mini-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .quick-stats { gap: 12px; }
       .ohlc-grid .oc b { font-size: 12px; }
-      /* 导航：横滚不换行，右侧再收一点给主题切换器让位 */
-      .pn-inner { padding: 7px 14px; padding-right: 108px; gap: 5px; }
+      /* 分页器：手机上页码数字太占宽，只留当前页 + 跳转；控件整体居中换行 */
+      .pager { justify-content: center; gap: 10px; }
+      .pg-summary { flex-basis: 100%; text-align: center; }
+      .pg-jump { order: 3; flex-basis: 100%; justify-content: center; }
+      .pg-btn { min-width: 38px; height: 38px; }
+      .pg-num { min-width: 30px; height: 38px; padding: 0 6px; font-size: 12.5px; }
+      /* 导航：横滚不换行。主题切换器现在实体位于 .pn-tail 插槽内（见 adoptThemeSwitch），
+         不再需要在导航内预留 108px 的盲区，只留一点与插槽的间隙。 */
+      .pn-inner { padding: 7px 14px; padding-right: 8px; gap: 5px; }
       .pn-link { padding: 5px 11px; font-size: 12.5px; }
       .pn-link .ic { width: 14px; height: 14px; }
       [id^="sec-"] { scroll-margin-top: 58px; }
@@ -1206,7 +1287,7 @@
         --shadow: none !important; --shadow-sm: none !important; --shadow-lg: none !important;
         --row-hover: #fff !important; --th-bg: #f5f5f4 !important;
       }
-      .particles, .progress-bar, .back-top, .theme-switch, .table-more, .page-nav, .boot { display: none !important; }
+      .particles, .progress-bar, .back-top, .theme-switch, .page-nav, .boot { display: none !important; }
       .reveal { opacity: 1 !important; transform: none !important; }
       .card, .qstat, .impact-card, .callout { break-inside: avoid; }
       .hero, footer { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -1481,6 +1562,9 @@
     <!-- 版本记录是独立页面，不是页内锚点：跳转而非滚动，故不参与 scroll spy -->
     <a class="pn-link" href="./releases.html"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg>版本记录</a>
   </div>
+  <!-- 窄屏时主题切换器会被 JS 挪进这里（见 adoptThemeSwitch()）。
+       它不在 .pn-inner 内，所以不随导航横向滚动，永远钉在右侧、不遮挡导航项。 -->
+  <div class="pn-tail" id="pnTail" aria-hidden="true"></div>
 </nav>
 
 <div class="container">
@@ -1764,7 +1848,22 @@
         <tbody id="tableBody"></tbody>
       </table>
     </div>
-    <button class="table-more" id="tableMore" type="button" hidden>显示更多</button>
+    <nav class="pager" id="tablePager" aria-label="历史数据分页">
+      <div class="pg-summary" id="pgSummary"></div>
+      <div class="pg-ctrl">
+        <button class="pg-btn" id="pgFirst" type="button" aria-label="第一页">«</button>
+        <button class="pg-btn" id="pgPrev" type="button" aria-label="上一页">‹</button>
+        <span class="pg-nums" id="pgNums"></span>
+        <button class="pg-btn" id="pgNext" type="button" aria-label="下一页">›</button>
+        <button class="pg-btn" id="pgLast" type="button" aria-label="最后一页">»</button>
+      </div>
+      <div class="pg-jump">
+        <label for="pgJumpInput">跳至</label>
+        <input class="pg-input" id="pgJumpInput" type="number" min="1" inputmode="numeric" aria-label="跳至第几页">
+        <span>页</span>
+        <button class="pg-btn pg-go" id="pgJumpGo" type="button">Go</button>
+      </div>
+    </nav>
   </div>
 
   <!-- ========== 数据源状态 ========== -->
@@ -1921,7 +2020,64 @@ function initPageNav() {
   }, { passive: true });
   window.addEventListener('resize', update, { passive: true });
 
+  // ---- 锚点点击：必须先「落地」再滚动 ----
+  // 致命陷阱：.reveal 未进入视口时带 transform: translateY(36px)。
+  // 原生锚点滚动按「带 transform 的位置」计算落点，于是少滚 36px；紧接着 reveal
+  // 动画把内容整体上移 36px，标题就被吸顶导航（约 47px 高）压住 —— 实测
+  // #sec-history 标题 top=43px < 导航底边 47px。用户看到的正是「锚点钉不上去」。
+  // 解法：点击时先同步把所有 .reveal 置为已归位（消除 36px 偏移），再自己滚动到
+  // 目标（用 rect + 当前滚动量算绝对坐标），最后补一帧校正。
+  function scrollToTarget(el) {
+    const navH = nav.offsetHeight || 54;
+    const gap = 14;                       // 导航底边与标题之间留一点呼吸感
+    const y = el.getBoundingClientRect().top + window.pageYOffset - navH - gap;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
+    // 平滑滚动的落点会受过渡期间动画影响，收尾再校正一次（此时 transform 已归零）
+    if (!reduce) {
+      setTimeout(() => {
+        const y2 = el.getBoundingClientRect().top + window.pageYOffset - navH - gap;
+        if (Math.abs(window.pageYOffset - y2) > 2) window.scrollTo({ top: Math.max(0, y2), behavior: 'auto' });
+      }, 480);
+    }
+  }
+
+  function settleReveals(target) {
+    // 目标及其之前的所有区块都置为可见：否则滚动途中它们还在 36px 偏移态，
+    // 会持续改变文档高度、把落点算飘。
+    const cards = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
+    const idx = cards.indexOf(target);
+    const upto = idx >= 0 ? idx : cards.length - 1;
+    for (let i = 0; i <= upto; i++) cards[i].classList.add('visible');
+  }
+
+  links.forEach((a) => {
+    const href = String(a.getAttribute('href') || '');
+    if (!href.startsWith('#') || href.length < 2) return;   // releases.html 这类外链放行
+    a.addEventListener('click', (ev) => {
+      const el = document.getElementById(href.slice(1));
+      if (!el) return;
+      ev.preventDefault();
+      settleReveals(el);
+      scrollToTarget(el);
+      // 同步地址栏锚点，但用 replaceState 避免再触发一次原生跳转
+      try { history.replaceState(null, '', href); } catch (e) { /* file:// 下忽略 */ }
+      if (activeLink !== a) { links.forEach((x) => x.classList.toggle('active', x === a)); activeLink = a; }
+    });
+  });
+
   update();
+
+  // 带 hash 打开页面（刷新/分享链接）时，原生跳转同样踩 translateY(36px) 的坑，
+  // 这里在 boot 收尾后主动重算一次落点。
+  const h = String(location.hash || '');
+  if (h.length > 1) {
+    const el = document.getElementById(h.slice(1));
+    if (el) {
+      settleReveals(el);
+      requestAnimationFrame(() => scrollToTarget(el));
+    }
+  }
 }
 
 // ============ Scroll Reveal Observer ============
@@ -2030,7 +2186,10 @@ let SPOT = [];          // 现货序列（升序）
 let LME = [];           // LME 序列（升序）
 let META = {};
 let CUR_RANGE = '1y';
-let TABLE_LIMIT = 30;
+// 历史表分页：每页条数固定，当前页码由分页器维护。
+// 原先的 TABLE_LIMIT 是「显示更多」累加式，点一次会把 5289 条全部铺开、页面滑不到底。
+const PAGE_SIZE = 30;
+let TABLE_PAGE = 1;
 let dataLoadFailed = false;
 let retryBtnAdded = false;
 let _chartData = null;
@@ -2539,7 +2698,15 @@ function renderTable() {
   SPOT.forEach(s => { spotMap[s.date] = s; });
 
   const rows = FUT.slice().reverse();               // 最新在前
-  const shown = TABLE_LIMIT > 0 ? rows.slice(0, TABLE_LIMIT) : rows;
+  const total = rows.length;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // 页码夹紧：数据量变小或跳转越界时不至于渲染空白页
+  if (TABLE_PAGE > pageCount) TABLE_PAGE = pageCount;
+  if (TABLE_PAGE < 1) TABLE_PAGE = 1;
+
+  const start = (TABLE_PAGE - 1) * PAGE_SIZE;
+  const shown = rows.slice(start, start + PAGE_SIZE);
 
   tbody.innerHTML = shown.map(d => {
     const cls = dirClass(d.change || 0);
@@ -2567,21 +2734,86 @@ function renderTable() {
     </tr>`;
   }).join('');
 
-  // 「显示更多」按钮
-  const btn = document.getElementById('tableMore');
-  const total = rows.length;
-  if (TABLE_LIMIT > 0 && total > TABLE_LIMIT) {
-    btn.hidden = false;
-    btn.textContent = '显示更多（已显示 ' + shown.length + ' / ' + groupNum(total, 0) + ' 个交易日）';
-  } else if (TABLE_LIMIT > 0 && total <= TABLE_LIMIT) {
-    btn.hidden = true;
-  } else {
-    btn.hidden = false;
-    btn.textContent = '收起（只显示最近 30 个交易日）';
-  }
+  renderPager(total, pageCount, start, shown.length);
 
   document.getElementById('tableSectionText').textContent =
-    '历史交易日数据 · 最新 ' + groupNum(shown.length, 0) + ' / ' + groupNum(total, 0) + ' 条';
+    '历史交易日数据 · 第 ' + groupNum(TABLE_PAGE, 0) + ' / ' + groupNum(pageCount, 0) +
+    ' 页 · 共 ' + groupNum(total, 0) + ' 条';
+}
+
+/* ---- 分页器渲染 ---- */
+function renderPager(total, pageCount, start, shownCount) {
+  const cur = TABLE_PAGE;
+  const from = total === 0 ? 0 : start + 1;
+  const to = start + shownCount;
+
+  const sum = document.getElementById('pgSummary');
+  if (sum) {
+    sum.textContent = '第 ' + groupNum(from, 0) + '~' + groupNum(to, 0) + ' 条 / 共 ' +
+      groupNum(total, 0) + ' 条 · 每页 ' + PAGE_SIZE + ' 条';
+  }
+
+  const set = (id, disabled, fn) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.disabled = disabled;
+    if (fn) b.onclick = fn;
+  };
+  set('pgFirst', cur <= 1, () => goPage(1));
+  set('pgPrev', cur <= 1, () => goPage(cur - 1));
+  set('pgNext', cur >= pageCount, () => goPage(cur + 1));
+  set('pgLast', cur >= pageCount, () => goPage(pageCount));
+
+  // 页码：首末页常驻，当前页左右各 1 页，其余用省略号占位。
+  // 窄屏（<640px）进一步收紧到「当前页 ±1」—— 加上首末页和两个省略号会撑到 7 个块，横向放不下。
+  const nums = document.getElementById('pgNums');
+  if (nums) {
+    const narrow = window.innerWidth < 640;
+    const pages = [];
+    if (pageCount <= (narrow ? 5 : 7)) {
+      for (let i = 1; i <= pageCount; i++) pages.push(i);
+    } else if (narrow) {
+      if (cur > 2) pages.push('…');
+      for (let i = Math.max(1, cur - 1); i <= Math.min(pageCount, cur + 1); i++) pages.push(i);
+      if (cur < pageCount - 1) pages.push('…');
+    } else {
+      pages.push(1);
+      if (cur > 3) pages.push('…');
+      for (let i = Math.max(2, cur - 1); i <= Math.min(pageCount - 1, cur + 1); i++) pages.push(i);
+      if (cur < pageCount - 2) pages.push('…');
+      pages.push(pageCount);
+    }
+    nums.innerHTML = pages.map((p) => {
+      if (p === '…') return '<span class="pg-gap">…</span>';
+      const act = p === cur ? ' active' : '';
+      const aria = p === cur ? ' aria-current="page"' : '';
+      return '<button class="pg-num' + act + '" type="button" data-pg="' + p + '"' + aria + '>' + p + '</button>';
+    }).join('');
+    nums.querySelectorAll('.pg-num').forEach((b) => {
+      b.onclick = () => goPage(parseInt(b.dataset.pg, 10));
+    });
+  }
+
+  const inp = document.getElementById('pgJumpInput');
+  if (inp) {
+    inp.max = String(pageCount);
+    inp.placeholder = '1-' + pageCount;
+    // 只在用户没有正在输入时回填，否则会把光标里的内容冲掉
+    if (document.activeElement !== inp) inp.value = '';
+  }
+}
+
+/* ---- 翻页：渲染 + 把表格顶部滚回视口（否则翻页后停在页面中段，看不到新内容） ---- */
+function goPage(p) {
+  TABLE_PAGE = p;
+  renderTable();
+  const sec = document.getElementById('sec-history');
+  if (!sec) return;
+  const navH = (document.getElementById('pageNav') || {}).offsetHeight || 0;
+  const y = sec.getBoundingClientRect().top + window.scrollY - navH - 12;
+  // 尊重「减少动态效果」偏好
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
 }
 
 // ============ 数据源状态 ============
@@ -3155,22 +3387,71 @@ function showDataWarning() {
 }
 
 // 「显示更多 / 收起」切换
-document.getElementById('tableMore').addEventListener('click', function () {
-  TABLE_LIMIT = TABLE_LIMIT > 0 ? 0 : 30;
-  renderTable();
-  if (TABLE_LIMIT === 0) {
-    // 展开后按钮变成「收起」，把它留在原处即可（表格很长，不强制滚回顶部）
+// ============ 历史表分页 ============
+// 页码按钮的 onclick 在 renderPager() 里逐次绑定，这里只处理跳转输入框（只需绑一次）。
+(function bindPagerJump() {
+  const inp = document.getElementById('pgJumpInput');
+  const go = document.getElementById('pgJumpGo');
+  if (!inp || !go) return;
+  function jump() {
+    const n = parseInt(inp.value, 10);
+    if (!isFinite(n) || n < 1) return;      // 非法输入直接忽略，不跳也不报错
+    goPage(n);
+    inp.value = '';
   }
-});
+  go.addEventListener('click', jump);
+  inp.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); jump(); }
+  });
+
+  // 窄屏/宽屏切换会改变页码块的排布密度（见 renderPager 里的 narrow 分支），
+  // 跨越 640px 断点时重绘一次。用 rAF 节流，避免拖拽窗口时狂重渲染。
+  let _pgResizePending = false;
+  window.addEventListener('resize', function () {
+    if (_pgResizePending) return;
+    _pgResizePending = true;
+    requestAnimationFrame(function () {
+      _pgResizePending = false;
+      if (typeof FUT !== 'undefined' && FUT.length) renderTable();
+    });
+  }, { passive: true });
+})();
+
+// ============ 主题切换器的归属 ============
+// 桌面：留在 body 下，以 fixed 悬浮在右上角（Hero 区域有足够留白，不遮内容）。
+// 窄屏（<640px）：挪进导航条右侧的 .pn-tail 插槽 —— 若继续悬浮，它会盖住
+//   下方的数据列（实测遮住历史表数值），挪进导航条既省空间又不遮内容。
+// 这里用 DOM 移动而非 CSS 变通（::before / 绝对定位借位都试过，无法同时做到
+//   「不随导航横滚」和「不遮最后一个导航项」）。
+function adoptThemeSwitch() {
+  const ts = document.getElementById('themeSwitch');
+  const tail = document.getElementById('pnTail');
+  if (!ts || !tail) return;
+  const narrow = window.innerWidth < 640;
+  const wantParent = narrow ? tail : document.body;
+  if (ts.parentElement !== wantParent) wantParent.appendChild(ts);
+  tail.setAttribute('aria-hidden', narrow ? 'false' : 'true');
+}
 
 // ============ 启动 ============
 function bootRun() {
+  // 切换器归属必须在 init 之前定好：它会改变导航条宽度，
+  // 而 initPageNav() 里的 scroll spy 依赖导航高度/宽度，晚了会算错。
+  adoptThemeSwitch();
   // init 内部任何异常都不该把加载遮罩留在屏幕上 —— finally 统一收尾，
   // 另有 BOOT_MAX_MS 兜底，双保险。
   Promise.resolve()
     .then(init)
     .catch((err) => { console.error('初始化失败:', err); })
     .finally(() => { hideBoot(); initPageNav(); });
+
+  // 跨 640px 断点时切换器归属要跟着变（同时触发导航高度重算）
+  let _adoptPending = false;
+  window.addEventListener('resize', () => {
+    if (_adoptPending) return;
+    _adoptPending = true;
+    requestAnimationFrame(() => { _adoptPending = false; adoptThemeSwitch(); });
+  }, { passive: true });
 }
 
 // 等 DOMContentLoaded 确保 defer 脚本（ECharts CDN）已就绪
