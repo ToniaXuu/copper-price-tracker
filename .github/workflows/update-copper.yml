@@ -1,0 +1,65 @@
+name: 自动更新沪铜价格数据
+
+on:
+  # 08:30（北京时间）= 00:30 UTC。
+  # 为什么是 08:30：SHFE 的结算价与收盘价在盘中是空字符串（实测），
+  # 必须等收盘结算之后跑；08:30 拿到的正是上一个交易日的完整结算数据，
+  # 同时和油价项目的 09:00 推送错开时段。
+  # 注：GitHub Actions 的 schedule 常延迟 5~20 分钟，精确触发另由 cron-job.org 兜底。
+  schedule:
+    - cron: "30 0 * * *"
+
+  # 支持手动触发
+  workflow_dispatch:
+
+jobs:
+  update-copper:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write  # 允许自动提交
+
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v5
+
+      - name: 设置 Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖
+        run: pip install requests
+
+      - name: 运行数据更新脚本
+        run: python scripts/update_copper.py
+
+      - name: 检查是否有数据变更
+        id: check_changes
+        run: |
+          if [[ -n $(git status --porcelain data.json) ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ 检测到 data.json 有更新"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "⏭️ data.json 无变化，跳过提交"
+          fi
+
+      - name: 提交并推送更新
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data.json
+          git commit -m "data: 自动更新沪铜价格数据 [skip ci]"
+          git push
+
+      - name: 发送每日通知（微信+钉钉）
+        # always()：更新脚本若因「主指标数据源全灭」而失败退出，默认会跳过后续步骤，
+        # 告警就送不出去了。这里保证通知照发，并把数据源故障一并带上。
+        if: always()
+        env:
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+        run: python scripts/send_notification.py "${{ steps.check_changes.outputs.changed }}"

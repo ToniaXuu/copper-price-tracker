@@ -1,0 +1,2894 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>沪铜价格趋势 · 电力设备采购锚点</title>
+  <meta name="description" content="追踪沪铜连续合约结算价、国内现货1#电解铜与LME铜价，每日更新涨跌、基差、沪伦比与用铜成本换算，为电力设备与线缆采购决策提供价格锚点。数据来源上海期货交易所、新浪财经、生意社。" />
+  <meta property="og:title" content="沪铜价格趋势 · 电力设备采购锚点" />
+  <meta property="og:description" content="追踪沪铜期货 + 现货电解铜 + LME 铜价，每日更新涨跌与用铜成本影响。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://ToniaXuu.github.io/copper-price-tracker/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="./favicon.png" type="image/png" />
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#0a0f1e" />
+  <meta name="color-scheme" content="dark light" />
+  <script>
+    /* 主题预置：在任何绘制前落盘 data-theme，避免闪白/闪黑。
+       优先级：URL ?theme= > localStorage > 跟随系统 */
+    (function () {
+      try {
+        var q = new URLSearchParams(location.search).get('theme');
+        var saved = q || localStorage.getItem('cpt-theme') || 'auto';
+        if (['light', 'dark', 'auto'].indexOf(saved) < 0) saved = 'auto';
+        if (saved !== 'auto') document.documentElement.setAttribute('data-theme', saved);
+      } catch (e) { /* 隐私模式忽略 */ }
+    })();
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Dataset",
+    "name": "沪铜价格趋势 · 电力设备采购锚点",
+    "description": "追踪沪铜连续合约、国内现货1#电解铜与LME铜价的历史序列与每日涨跌",
+    "url": "https://ToniaXuu.github.io/copper-price-tracker/",
+    "keywords": ["铜价", "沪铜", "电解铜", "LME", "现货铜", "电力设备", "线缆", "采购"],
+    "creator": { "@type": "Organization", "name": "ToniaXuu" },
+    "temporalCoverage": "2005-01-04/..",
+    "isAccessibleForFree": true,
+    "license": "MIT"
+  }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <style>
+    /* ================================================================
+       设计令牌层 —— 所有颜色/尺寸只在此处定义，组件样式一律引用变量。
+       暗色覆盖见文件末尾 DARK THEME 与 PRINT 两节。
+       品牌色取「铜」本色（铜橙 → 深琥珀），与油价项目的蓝紫刻意区分：
+       两个项目并排时，一眼能看出不是同一套皮肤换数字。
+       ================================================================ */
+    :root {
+      color-scheme: light;
+
+      /* ---- 基础面 ---- */
+      --bg: #f5f2ee;
+      --card: #ffffff;
+      --border: #e8e2da;
+      --text: #1c1917;
+      --sub: #78716c;
+
+      /* ---- 品牌（铜）---- */
+      --brand-1: #e0924f;
+      --brand-2: #a85a22;
+      --brand-gradient: linear-gradient(90deg, var(--brand-1), var(--brand-2));
+      --brand-gradient-text: linear-gradient(135deg, #f3b877, #d9803a);
+      --blue: #3b82f6;
+      --blue-strong: #2563eb;
+      --purple: #8b5cf6;
+
+      /* ---- 语义填充（涨红跌绿 —— 国内惯例）---- */
+      --red: #ef4444;
+      --red-light: #fee2e2;
+      --green: #10b981;
+      --green-light: #d1fae5;
+      --amber: #f59e0b;
+      --amber-light: #fef3c7;
+
+      /* ---- 语义文字（保证 4.5:1 对比度）---- */
+      --up-text: #c92a2a;
+      --down-text: #047857;
+      --flat-text: #b45309;
+      --accent-text: #a85a22;
+      --flat-fg: #92400e;
+
+      /* ---- 数据系列色（图表 + 指标卡边框同源）----
+         沪铜连续是主指标，独占高饱和铜色；现货/LME 作对照，压低饱和避免抢视觉。 */
+      --ser-futures: #c2703d;
+      --ser-spot: #0d9488;
+      --ser-lme: #4f6bed;
+      --ser-ratio: #8b5cf6;
+      --ser-basis: #d97706;
+      --ser-vol: #cbd5e1;
+
+      /* ---- 主指标强调色（沪铜连续）---- */
+      --primary: var(--ser-futures);
+      --primary-strong: #a85a22;
+      --primary-soft: #fdf3e9;
+      --primary-ring: color-mix(in srgb, var(--ser-futures) 25%, transparent);
+      --primary-glow: color-mix(in srgb, var(--ser-futures) 18%, transparent);
+      --primary-card-bg: linear-gradient(160deg, #fef8f2 0%, var(--card) 62%);
+
+      /* ---- 结构性表面 ---- */
+      --th-bg: #faf8f6;
+      --row-border: #f4f0eb;
+      --row-hover: #fdf8f3;
+      --scroll-thumb: #cbd5e1;
+      --sk-1: #e7e2dc;
+      --sk-2: #f3f0ec;
+      --dot-ring: #ffffff;
+      --tl-line-a: #c2703d;
+      --tl-line-b: #e8e2da;
+      --callout-bg: linear-gradient(135deg, #fdf4ea, #fdf8f2);
+      --callout-border: #f0d6b8;
+      --input-bg: #ffffff;
+      --input-border: #ddd5cb;
+      --chip-bg: #f7f3ee;
+
+      /* ---- Hero 与 Footer（恒定深底，不随主题翻转）---- */
+      --hero-bg: linear-gradient(135deg, #0a0f1e 0%, #171226 34%, #2a1a0d 68%, #0f172a 100%);
+      --hero-solid: #0a0f1e;
+      --hero-up: #f87171;
+      --hero-down: #4ade80;
+      --hero-amber: #fbbf24;
+      --hero-copper: #e8a56b;
+      --hero-text-dim: rgba(255,255,255,.55);
+      --footer-text: rgba(255,255,255,.6);
+      /* 压暗遮罩：两端重、中间轻（文字压在中间），底部收一道过渡接住内容区 */
+      --hero-scrim:
+        linear-gradient(180deg,
+          rgba(6,10,22,.66) 0%,
+          rgba(6,10,22,.30) 24%,
+          rgba(6,10,22,.22) 48%,
+          rgba(6,10,22,.52) 74%,
+          rgba(6,10,22,.90) 100%),
+        radial-gradient(ellipse 80% 64% at 50% 42%,
+          rgba(6,10,22,.52) 0%, rgba(6,10,22,.28) 55%, rgba(6,10,22,.04) 100%);
+
+      /* ---- 悬浮控件（固定压在半透明深底上，两主题共用一套亮色）---- */
+      --toggle-bg: rgba(15,23,42,.55);
+      --toggle-bg-hover: rgba(15,23,42,.78);
+      --toggle-border: rgba(255,255,255,.3);
+      --toggle-fg: #ffffff;
+
+      /* ---- 阴影 / 圆角 / 动效 ---- */
+      --shadow-sm: 0 1px 3px rgba(60,40,20,.07);
+      --shadow: 0 4px 24px rgba(60,40,20,.09);
+      --shadow-lg: 0 12px 40px rgba(60,40,20,.13);
+      --radius: 18px;
+      --radius-sm: 10px;
+      --transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+
+      /* ---- 图表（由 JS 读取，CSS 是唯一真源）---- */
+      --chart-axis-label: #78716c;
+      --chart-axis-line: #e8e2da;
+      --chart-split-line: #f4f0eb;
+      --chart-zoom-bg: #f0ebe5;
+      --chart-zoom-fill: rgba(194,112,61,.18);
+      --chart-area-from: rgba(194,112,61,.16);
+      --chart-area-to: rgba(194,112,61,0);
+      --chart-tooltip-bg: rgba(28,22,16,.95);
+      --chart-tooltip-border: transparent;
+      --chart-tooltip-fg: #ffffff;
+      --chart-icon: #78716c;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* ===== SCROLLBAR ===== */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
+
+    /* ===== PROGRESS BAR ===== */
+    .progress-bar {
+      position: fixed; top: 0; left: 0; height: 3px;
+      background: var(--brand-gradient);
+      z-index: 9999;
+      transition: width .15s linear;
+      border-radius: 0 2px 2px 0;
+    }
+
+    /* ===== FLOATING PARTICLES ===== */
+    .particles { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; pointer-events: none; z-index: 0; overflow: hidden; }
+    .particle {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0;
+      animation: floatUp linear infinite;
+    }
+    @keyframes floatUp {
+      0%   { transform: translateY(100vh) scale(0); opacity: 0; }
+      15%  { opacity: 0.5; }
+      50%  { opacity: 0.3; }
+      85%  { opacity: 0; }
+      100% { transform: translateY(-10vh) scale(1.4); opacity: 0; }
+    }
+
+    /* ===== HERO =====
+       背景是纯 SVG 手绘的铜线圈 + 铜排，不用位图：
+       零外链依赖、不挑 DPI、体积几百字节，也不会有水印/版权问题。 */
+    .hero {
+      position: relative;
+      background: var(--hero-bg);
+      padding: 84px 20px 70px;
+      overflow: hidden;
+      min-height: 580px;
+      display: flex; align-items: center;
+    }
+    .hero-art { position: absolute; inset: 0; overflow: hidden; }
+    .hero-art svg { width: 100%; height: 100%; display: block; }
+    /* 线圈整体缓慢自转，让静态页面有一点「活」的感觉 */
+    .coil-rotor {
+      transform-origin: 1040px 300px;
+      animation: coilSpin 90s linear infinite;
+    }
+    @keyframes coilSpin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    /* 铜排上流动的高光：沿 x 轴平移，模拟金属反光扫过 */
+    .busbar-shine { animation: shineSlide 7s ease-in-out infinite alternate; }
+    @keyframes shineSlide {
+      from { transform: translateX(-60px); opacity: .35; }
+      to   { transform: translateX(60px);  opacity: .8; }
+    }
+    .hero-scrim {
+      position: absolute; inset: 0;
+      background: var(--hero-scrim);
+      z-index: 1;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 18% 28%, color-mix(in srgb, var(--ser-futures) 26%, transparent) 0%, transparent 56%),
+        radial-gradient(circle at 82% 72%, rgba(79,107,237,.16) 0%, transparent 52%);
+      animation: heroGlow 9s ease-in-out infinite alternate;
+      z-index: 2;
+    }
+    @keyframes heroGlow {
+      0%   { opacity: 0.78; }
+      100% { opacity: 1; }
+    }
+
+    .hero-inner {
+      position: relative;
+      max-width: 960px;
+      margin: 0 auto;
+      text-align: center;
+      z-index: 3;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 999px;
+      padding: 5px 18px;
+      font-size: 12px;
+      letter-spacing: .05em;
+      color: rgba(255,255,255,.7);
+      backdrop-filter: blur(8px);
+      margin-bottom: 24px;
+      animation: fadeInUp .7s ease-out both;
+    }
+    .hero-badge .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 60%, transparent); }
+      50%     { box-shadow: 0 0 0 8px color-mix(in srgb, var(--green) 0%, transparent); }
+    }
+    .hero h1 {
+      font-size: clamp(28px, 5vw, 52px);
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.15;
+      letter-spacing: -.02em;
+      margin-bottom: 16px;
+      animation: fadeInUp .7s .1s ease-out both;
+      text-shadow: 0 2px 18px rgba(4,8,18,.78), 0 1px 3px rgba(4,8,18,.6);
+    }
+    .hero h1 .cu {
+      background: var(--brand-gradient-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      font-size: 16px;
+      color: rgba(255,255,255,.8);
+      max-width: 620px;
+      margin: 0 auto 36px;
+      animation: fadeInUp .7s .2s ease-out both;
+      text-shadow: 0 1px 10px rgba(4,8,18,.72);
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .hero-stats {
+      display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;
+      animation: fadeInUp .7s .3s ease-out both;
+    }
+    .hero-stat {
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 14px;
+      padding: 16px 22px;
+      backdrop-filter: blur(6px);
+      min-width: 148px;
+      transition: var(--transition);
+    }
+    .hero-stat:hover {
+      background: rgba(255,255,255,.1);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.3);
+    }
+    .hero-stat .val {
+      font-size: 28px; font-weight: 800;
+      color: #fff;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }
+    .hero-stat .val.is-up    { color: var(--hero-up); }
+    .hero-stat .val.is-down  { color: var(--hero-down); }
+    .hero-stat .val.is-copper{ color: var(--hero-copper); }
+    .hero-stat .lab { font-size: 12px; color: var(--hero-text-dim); margin-top: 6px; }
+    .hero-stat .sub2 {
+      font-size: 11px; color: rgba(255,255,255,.42); margin-top: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+    /* 主指标（沪铜连续）那张卡：铜边 + 更亮的底 + 略大字号 */
+    .hero-stat.is-primary {
+      background: color-mix(in srgb, var(--ser-futures) 22%, rgba(255,255,255,.06));
+      border-color: color-mix(in srgb, var(--ser-futures) 58%, transparent);
+      box-shadow: 0 8px 28px color-mix(in srgb, var(--ser-futures) 24%, transparent);
+    }
+    .hero-stat.is-primary:hover {
+      background: color-mix(in srgb, var(--ser-futures) 30%, rgba(255,255,255,.08));
+      box-shadow: 0 12px 34px color-mix(in srgb, var(--ser-futures) 34%, transparent);
+    }
+    .hero-stat.is-primary .val { font-size: 34px; }
+    .hero-stat.is-primary .lab { color: rgba(255,255,255,.82); }
+
+    /* ===== CONTAINER ===== */
+    .container { max-width: 1160px; margin: 0 auto; padding: 48px 20px 80px; position: relative; z-index: 4; }
+
+    /* ===== ICON SYSTEM（内联 SVG，继承 currentColor）===== */
+    .ic {
+      width: 20px; height: 20px; flex: 0 0 auto;
+      fill: none; stroke: currentColor;
+      stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+      color: var(--ser-futures);
+    }
+    .ic-sm { width: 16px; height: 16px; }
+    .ic-lg { width: 24px; height: 24px; }
+
+    /* ===== SECTION TITLE ===== */
+    .section-title {
+      font-size: 22px; font-weight: 700; color: var(--text);
+      margin-bottom: 22px;
+      display: flex; align-items: center; gap: 10px;
+      letter-spacing: -.01em;
+      flex-wrap: wrap;
+    }
+    .section-title .ic { color: var(--ser-futures); }
+    .title-tag {
+      font-size: 11px; font-weight: 700;
+      color: var(--primary-strong);
+      background: var(--primary-soft);
+      border: 1px solid color-mix(in srgb, var(--ser-futures) 28%, transparent);
+      padding: 2px 9px; border-radius: 999px;
+      letter-spacing: .04em;
+      margin-left: 2px;
+      white-space: nowrap;
+    }
+
+    /* ---- 当前价格标题行 ---- */
+    .price-head {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+      margin-bottom: 16px;
+    }
+    .price-head .section-title { margin-bottom: 0; }
+    .trend-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      white-space: nowrap;
+      background: var(--row-hover);
+      color: var(--sub);
+    }
+    .trend-badge.up   { background: var(--red-light);   color: var(--up-text); }
+    .trend-badge.down { background: var(--green-light); color: var(--down-text); }
+    .trend-badge.flat { background: var(--amber-light); color: var(--flat-fg); }
+    .btn-retry {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--ser-futures); color: #fff;
+      border: none; border-radius: 999px;
+      padding: 4px 14px; font-size: 12px; font-weight: 700;
+      cursor: pointer; font-family: inherit;
+      margin-left: 6px;
+      transition: background .2s;
+    }
+    .btn-retry:hover { background: var(--primary-strong); }
+    .btn-retry .ic { width: 14px; height: 14px; color: #fff; }
+    .btn-retry[disabled] { opacity: .7; cursor: default; }
+
+    /* ===== CARD ===== */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 32px;
+      margin-bottom: 28px;
+      transition: var(--transition);
+      position: relative;
+    }
+    .card:hover { box-shadow: var(--shadow-lg); }
+
+    /* ===== SCROLL REVEAL ===== */
+    .reveal {
+      opacity: 0;
+      transform: translateY(36px);
+      transition: opacity .7s ease-out, transform .7s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* ===== CURRENT PRICES =====
+       布局：沪铜连续主卡跨列做大，现货与 LME 挤在右侧作对照。 */
+    .price-grid {
+      display: grid;
+      grid-template-columns: 1.75fr 1fr;
+      grid-template-areas: "pri a" "pri b";
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+    .price-cell.is-primary { grid-area: pri; }
+    .price-cell:not(.is-primary):nth-of-type(2) { grid-area: a; }
+    .price-cell:not(.is-primary):nth-of-type(3) { grid-area: b; }
+    @media (max-width: 1100px) {
+      .price-grid {
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-areas: "pri pri" "a b";
+      }
+    }
+    @media (max-width: 640px) {
+      .price-grid {
+        grid-template-columns: 1fr;
+        grid-template-areas: "pri" "a" "b";
+      }
+    }
+    .price-cell {
+      background: var(--bg);
+      border-radius: 14px;
+      padding: 18px;
+      text-align: center;
+      border: 1px solid var(--border);
+      transition: var(--transition);
+      display: flex; flex-direction: column; justify-content: center;
+      position: relative;
+    }
+    .price-cell:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+    .price-cell .p-label { font-size: 11px; color: var(--sub); margin-bottom: 6px; letter-spacing: .04em; }
+    .price-cell .p-value {
+      font-size: 26px; font-weight: 800; color: var(--text); line-height: 1.1; margin-bottom: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .price-cell .p-change { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .price-cell .p-change.up   { color: var(--up-text); }
+    .price-cell .p-change.down { color: var(--down-text); }
+    .price-cell .p-note {
+      font-size: 11px; color: var(--sub); margin-top: 10px;
+      padding-top: 9px; border-top: 1px dashed var(--border);
+      line-height: 1.5;
+    }
+
+    /* ---- 主卡（沪铜连续）---- */
+    .price-cell.is-primary {
+      background: var(--primary-card-bg);
+      border: 1px solid color-mix(in srgb, var(--ser-futures) 36%, var(--border));
+      border-top: 4px solid var(--ser-futures);
+      box-shadow: 0 10px 34px var(--primary-glow);
+      padding: 26px 24px;
+      align-items: center;
+    }
+    .price-cell.is-primary:hover {
+      box-shadow: 0 16px 44px var(--primary-ring);
+      transform: translateY(-4px);
+    }
+    .price-cell.is-primary .p-label {
+      font-size: 13px; font-weight: 700;
+      color: var(--primary-strong);
+      letter-spacing: .08em;
+      margin-bottom: 12px;
+    }
+    .price-cell.is-primary .p-value {
+      font-size: clamp(42px, 6vw, 60px);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -.03em;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+    .price-cell.is-primary .p-change { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+    .price-cell.is-primary .p-change.up   { color: var(--up-text); }
+    .price-cell.is-primary .p-change.down { color: var(--down-text); }
+    .price-cell.is-primary .p-ribbon {
+      position: absolute; top: 14px; right: 14px;
+      background: var(--ser-futures); color: #fff;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: .1em;
+      padding: 3px 10px; border-radius: 999px;
+      box-shadow: 0 3px 10px var(--primary-ring);
+    }
+    .price-cell.is-primary .p-note {
+      border-top: 1px dashed color-mix(in srgb, var(--ser-futures) 32%, transparent);
+      width: 100%; text-align: center; font-size: 11.5px;
+    }
+    /* 主卡里的「开/高/低/收」四宫格 */
+    .ohlc-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 6px; width: 100%; margin-top: 12px;
+    }
+    .ohlc-grid .oc {
+      background: color-mix(in srgb, var(--ser-futures) 7%, transparent);
+      border-radius: 8px; padding: 7px 4px;
+    }
+    .ohlc-grid .oc b {
+      display: block; font-size: 13px; font-weight: 700;
+      font-variant-numeric: tabular-nums; color: var(--text);
+    }
+    .ohlc-grid .oc span { font-size: 10px; color: var(--sub); }
+
+    /* ===== QUICK STATS ===== */
+    .quick-stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 1100px) { .quick-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .qstat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 18px 20px;
+      box-shadow: var(--shadow-sm);
+      position: relative;
+      overflow: hidden;
+    }
+    .qstat::after {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 3px;
+      transition: var(--transition);
+      background: var(--ser-futures);
+      opacity: .55;
+    }
+    .qstat.up::after   { background: var(--red); opacity: 1; }
+    .qstat.down::after { background: var(--green); opacity: 1; }
+    .qstat .label { font-size: 12px; color: var(--sub); margin-bottom: 6px; }
+    .qstat .value {
+      font-size: 26px; font-weight: 800; line-height: 1.15;
+      transition: color .5s;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+    }
+    .qstat.up .value   { color: var(--up-text); }
+    .qstat.down .value { color: var(--down-text); }
+    .qstat .suffix { font-size: 11.5px; color: var(--sub); margin-top: 5px; line-height: 1.5; }
+
+    /* ===== CHART AREA ===== */
+    .chart-wrap { position: relative; height: 500px; }
+    .chart-wrap.sm { height: 300px; }
+    @media (max-width: 768px) { .chart-wrap { height: 400px; } .chart-wrap.sm { height: 260px; } }
+    @media (max-width: 640px) { .chart-wrap { height: 340px; } }
+
+    /* 周期切换（分段控件） */
+    .range-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .range-group {
+      display: inline-flex; gap: 2px; padding: 3px;
+      background: var(--chip-bg); border: 1px solid var(--border);
+      border-radius: 999px;
+    }
+    .rg-btn {
+      border: none; background: transparent; color: var(--sub);
+      font-family: inherit; font-size: 12px; font-weight: 700;
+      padding: 5px 14px; border-radius: 999px; cursor: pointer;
+      transition: background .22s, color .22s;
+      white-space: nowrap;
+    }
+    .rg-btn:hover { color: var(--text); }
+    .rg-btn[aria-pressed="true"] {
+      background: var(--ser-futures); color: #fff;
+      box-shadow: 0 2px 8px var(--primary-ring);
+    }
+    .range-hint { font-size: 11.5px; color: var(--sub); margin-left: auto; }
+
+    /* 图表自定义图例 */
+    .chart-legend {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px;
+      margin: -4px 0 14px;
+      font-size: 12px; color: var(--sub);
+    }
+    .chart-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+    .chart-legend .sw { width: 14px; height: 3px; border-radius: 2px; flex: 0 0 auto; }
+    .chart-legend .sw-dash { height: 0; border-top: 2px dashed currentColor; background: none !important; }
+    .chart-legend .lg-hint { opacity: .85; }
+
+    /* ===== 年内位置条 ===== */
+    .pos-track {
+      position: relative; height: 14px; border-radius: 999px;
+      background: linear-gradient(90deg,
+        color-mix(in srgb, var(--green) 32%, transparent) 0%,
+        color-mix(in srgb, var(--amber) 32%, transparent) 50%,
+        color-mix(in srgb, var(--red) 32%, transparent) 100%);
+      margin: 18px 0 8px;
+    }
+    .pos-fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      border-radius: 999px;
+      background: var(--brand-gradient);
+      opacity: .3;
+      transition: width .9s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .pos-mark {
+      position: absolute; top: 50%; width: 18px; height: 18px;
+      margin: -9px 0 0 -9px;
+      border-radius: 50%;
+      background: var(--ser-futures);
+      border: 3px solid var(--card);
+      box-shadow: 0 0 0 2px var(--ser-futures), 0 2px 10px var(--primary-ring);
+      transition: left .9s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 2;
+    }
+    .pos-scale {
+      display: flex; justify-content: space-between; gap: 10px;
+      font-size: 11.5px; color: var(--sub);
+      font-variant-numeric: tabular-nums;
+      margin-top: 12px;
+    }
+    .pos-scale b { color: var(--text); font-weight: 700; }
+    .pos-verdict {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 14px; padding: 5px 14px;
+      border-radius: 999px; font-size: 12px; font-weight: 700;
+      background: var(--chip-bg); color: var(--sub);
+    }
+    .pos-verdict.high { background: var(--red-light); color: var(--up-text); }
+    .pos-verdict.mid  { background: var(--amber-light); color: var(--flat-fg); }
+    .pos-verdict.low  { background: var(--green-light); color: var(--down-text); }
+
+    /* ===== 迷你统计块 ===== */
+    .mini-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+      gap: 14px;
+      margin-top: 24px;
+      padding-top: 22px;
+      border-top: 1px dashed var(--border);
+    }
+    .ms-item .k { font-size: 11.5px; color: var(--sub); margin-bottom: 4px; }
+    .ms-item .v {
+      font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums;
+      color: var(--text);
+    }
+    .ms-item .v.up { color: var(--up-text); }
+    .ms-item .v.down { color: var(--down-text); }
+
+    /* ===== 双图并排 ===== */
+    .dual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+    @media (max-width: 900px) { .dual-grid { grid-template-columns: 1fr; gap: 30px; } }
+    .dual-grid .sub-title {
+      font-size: 14px; font-weight: 700; margin-bottom: 4px;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .dual-grid .sub-desc { font-size: 11.5px; color: var(--sub); margin-bottom: 10px; line-height: 1.6; }
+
+    /* ===== 换算器 ===== */
+    .conv-grid { display: grid; grid-template-columns: 1fr 1.25fr; gap: 26px; }
+    @media (max-width: 900px) { .conv-grid { grid-template-columns: 1fr; gap: 30px; } }
+    .conv-input-row {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .conv-input-row label { font-size: 12.5px; color: var(--sub); font-weight: 600; }
+    .conv-input {
+      flex: 1 1 150px; min-width: 0;
+      font-family: inherit; font-size: 18px; font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      padding: 9px 14px;
+      border: 1.5px solid var(--input-border);
+      border-radius: var(--radius-sm);
+      background: var(--input-bg);
+      color: var(--text);
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .conv-input:focus {
+      outline: none;
+      border-color: var(--ser-futures);
+      box-shadow: 0 0 0 3px var(--primary-ring);
+    }
+    .conv-out { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .conv-cell {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 12px 14px;
+    }
+    .conv-cell .k { font-size: 11.5px; color: var(--sub); margin-bottom: 3px; }
+    .conv-cell .v {
+      font-size: 19px; font-weight: 800; color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .conv-cell .v .u { font-size: 11.5px; font-weight: 400; color: var(--sub); margin-left: 2px; }
+    .conv-cell.accent { border-color: color-mix(in srgb, var(--ser-futures) 40%, var(--border)); }
+    .conv-cell.accent .v { color: var(--primary-strong); }
+    .conv-note { font-size: 11.5px; color: var(--sub); margin-top: 14px; line-height: 1.75; }
+    .conv-note strong { color: var(--accent-text); }
+
+    /* ===== TABLE ===== */
+    .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .th-sub { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; opacity: .75; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .data-table thead th {
+      background: var(--th-bg);
+      color: var(--sub);
+      font-weight: 600;
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+      font-size: 12px;
+      letter-spacing: .03em;
+    }
+    .data-table tbody tr { border-bottom: 1px solid var(--row-border); transition: background .2s; }
+    .data-table tbody tr:hover { background: var(--row-hover); }
+    .data-table tbody td { padding: 11px 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .data-table thead th.th-primary {
+      color: var(--primary-strong);
+      background: color-mix(in srgb, var(--ser-futures) 10%, var(--th-bg));
+    }
+    .data-table tbody td.td-primary {
+      font-weight: 800;
+      color: var(--primary-strong);
+      background: color-mix(in srgb, var(--ser-futures) 7%, transparent);
+    }
+    .row-flag {
+      display: inline-block; margin-left: 6px;
+      font-size: 10px; font-weight: 700;
+      color: var(--flat-fg); background: var(--amber-light);
+      border-radius: 999px; padding: 1px 7px;
+      vertical-align: middle;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 11px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      white-space: nowrap;
+    }
+    .badge.up   { background: var(--red-light);  color: var(--up-text); }
+    .badge.down { background: var(--green-light); color: var(--down-text); }
+    .badge.flat { background: var(--amber-light); color: var(--flat-fg); }
+    .table-more {
+      display: block; width: 100%; margin-top: 16px;
+      padding: 11px; border-radius: var(--radius-sm);
+      border: 1.5px dashed var(--border);
+      background: transparent; color: var(--sub);
+      font-family: inherit; font-size: 13px; font-weight: 700;
+      cursor: pointer; transition: var(--transition);
+    }
+    .table-more:hover { border-color: var(--ser-futures); color: var(--primary-strong); background: var(--primary-soft); }
+
+    /* ===== 数据源状态 ===== */
+    .src-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+    }
+    .src-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 13px 15px;
+    }
+    .src-item .sdot {
+      width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto;
+      background: var(--green);
+    }
+    .src-item.bad .sdot { background: var(--red); }
+    .src-item .sn { font-size: 13px; font-weight: 700; }
+    .src-item .sd { font-size: 11.5px; color: var(--sub); line-height: 1.55; margin-top: 2px; }
+    .src-item .sf { font-size: 11px; color: var(--up-text); font-weight: 700; margin-top: 3px; }
+
+    /* ===== CALLOUT ===== */
+    .callout {
+      background: var(--callout-bg);
+      border: 1px solid var(--callout-border);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      display: flex; align-items: flex-start; gap: 15px;
+      margin-bottom: 26px;
+    }
+    .callout-icon {
+      width: 36px; height: 36px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 10px;
+      color: var(--accent-text);
+      background: color-mix(in srgb, var(--ser-futures) 15%, transparent);
+    }
+    .callout-icon .ic { width: 20px; height: 20px; color: inherit; }
+    .callout-text { font-size: 14px; line-height: 1.75; }
+    .callout-text strong { color: var(--accent-text); }
+
+    /* ===== 影响维度卡 ===== */
+    .impact-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .impact-card {
+      --ic-accent: var(--ser-futures);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+    .impact-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+      background: var(--ic-accent);
+      transition: var(--transition);
+    }
+    .impact-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+    .impact-card:hover::before { width: 6px; }
+    .impact-card.n1 { --ic-accent: var(--ser-futures); }
+    .impact-card.n2 { --ic-accent: var(--amber); }
+    .impact-card.n3 { --ic-accent: var(--ser-spot); }
+    .impact-card.n4 { --ic-accent: var(--blue); }
+    .impact-card.n5 { --ic-accent: var(--purple); }
+    .impact-card.n6 { --ic-accent: var(--ser-lme); }
+    .ic-icon {
+      width: 42px; height: 42px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 12px;
+      margin-bottom: 14px;
+      color: var(--ic-accent);
+      background: color-mix(in srgb, var(--ic-accent) 12%, transparent);
+    }
+    .ic-icon .ic { width: 22px; height: 22px; color: inherit; }
+    .ic-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+    .ic-body { font-size: 13px; color: var(--sub); line-height: 1.75; }
+    .ic-body strong { color: var(--text); }
+    .ic-dyn { color: var(--accent-text); font-weight: 700; }
+
+    /* ===== FOOTER ===== */
+    footer {
+      background: var(--hero-solid);
+      color: var(--footer-text);
+      text-align: center;
+      padding: 28px 20px;
+      font-size: 12px;
+      position: relative; z-index: 4;
+    }
+    footer a { color: rgba(255,255,255,.72); text-decoration: none; }
+    footer a:hover { color: #f3b877; }
+    footer .ic { color: inherit; vertical-align: -3px; margin-right: 3px; }
+
+    /* ===== THEME SWITCH（三选一分段控件：点哪个应用哪个）===== */
+    .theme-switch {
+      position: fixed; top: 16px; right: 16px; z-index: 1000;
+      display: flex; align-items: center; gap: 2px;
+      padding: 3px;
+      border-radius: 999px;
+      background: var(--toggle-bg);
+      border: 1px solid var(--toggle-border);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+    }
+    .ts-btn {
+      width: 30px; height: 30px; flex: 0 0 auto;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0; border: none; border-radius: 999px;
+      background: transparent; color: var(--toggle-fg);
+      opacity: .6; cursor: pointer;
+      transition: background .22s, color .22s, opacity .22s, transform .18s;
+    }
+    .ts-btn .ic { width: 17px; height: 17px; color: inherit; }
+    .ts-btn:hover { opacity: 1; background: var(--toggle-bg-hover); }
+    .ts-btn[aria-pressed="true"] { opacity: 1; background: var(--toggle-fg); color: var(--hero-solid); }
+    .ts-btn[aria-pressed="true"]:hover { background: var(--toggle-fg); }
+    .ts-btn:active { transform: scale(.9); }
+    .ts-btn:focus-visible { outline: 2px solid var(--toggle-fg); outline-offset: -2px; }
+
+    /* ===== FOCUS ===== */
+    :focus-visible { outline: 2px solid var(--ser-futures); outline-offset: 2px; }
+    .hero :focus-visible { outline-color: #f3b877; }
+
+    /* ===== BACK TO TOP ===== */
+    .back-top {
+      position: fixed; bottom: 28px; right: 28px; z-index: 999;
+      width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--ser-futures); color: #fff; border: none; cursor: pointer;
+      box-shadow: 0 4px 16px color-mix(in srgb, var(--ser-futures) 40%, transparent);
+      opacity: 0; transform: translateY(20px);
+      transition: opacity .35s, transform .35s, background .2s;
+      pointer-events: none;
+    }
+    .back-top .ic { width: 20px; height: 20px; color: #fff; }
+    .back-top.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .back-top:hover { background: var(--primary-strong); }
+
+    /* ===== SKELETON SHIMMER ===== */
+    @keyframes shimmer {
+      0%   { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .skeleton {
+      background: linear-gradient(90deg, var(--sk-1) 25%, var(--sk-2) 50%, var(--sk-1) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      border-radius: 6px;
+      color: transparent !important;
+    }
+
+    /* ================================================================
+       RESPONSIVE —— 全站仅两个断点：768（平板） / 640（手机）
+       ================================================================ */
+    @media (max-width: 768px) {
+      .data-table { font-size: 12px; }
+      .data-table thead th,
+      .data-table tbody td { padding: 8px 8px; }
+    }
+    @media (max-width: 640px) {
+      .hero { padding: 52px 16px 44px; min-height: auto; }
+      .hero h1 { font-size: 25px; }
+      .hero-stats { gap: 10px; }
+      .hero-stat { padding: 12px 15px; min-width: 0; flex: 1 1 calc(50% - 10px); }
+      .hero-stat .val { font-size: 22px; }
+      .hero-stat.is-primary .val { font-size: 26px; }
+      .card { padding: 20px 16px; }
+      .section-title { font-size: 17px; gap: 8px; }
+      .qstat .value { font-size: 22px; }
+      .qstat { padding: 15px; }
+      .conv-out { gap: 8px; }
+      .conv-cell { padding: 10px 11px; }
+      .conv-cell .v { font-size: 16px; }
+      .impact-grid { grid-template-columns: 1fr; }
+      .theme-switch { top: 10px; right: 10px; padding: 2px; gap: 1px; }
+      .ts-btn { width: 28px; height: 28px; }
+      .ts-btn .ic { width: 16px; height: 16px; }
+      .back-top { bottom: 18px; right: 18px; width: 40px; height: 40px; }
+      .range-hint { margin-left: 0; flex-basis: 100%; }
+      .price-cell.is-primary .p-value { font-size: 40px; }
+      .mini-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .quick-stats { gap: 12px; }
+      .ohlc-grid .oc b { font-size: 12px; }
+    }
+
+    /* ===== REDUCED MOTION ===== */
+    @media (prefers-reduced-motion: reduce) {
+      .particle, .coil-rotor, .busbar-shine { animation: none !important; }
+      .reveal { opacity: 1 !important; transform: none !important; }
+      .skeleton { animation: none !important; background: var(--sk-1) !important; }
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+      html { scroll-behavior: auto; }
+    }
+
+    /* ================================================================
+       DARK THEME
+       同一份令牌两处落点：① 系统偏好（无 data-theme 时生效）
+       ② 用户手动选择（html[data-theme="dark"]）
+       ================================================================ */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #12100f; --card: #1c1a19; --border: #35302c;
+        --text: #ece7e3; --sub: #a8a29e;
+        --red-light: #341a1a; --green-light: #112f24; --amber-light: #3a2c12;
+        --up-text: #f87171; --down-text: #34d399; --flat-text: #fbbf24;
+        --accent-text: #e8a56b; --flat-fg: #fbbf24;
+        --ser-futures: #e0913f; --ser-spot: #2dd4bf; --ser-lme: #818cf8;
+        --ser-ratio: #a78bfa; --ser-basis: #fbbf24; --ser-vol: #3f3a35;
+        --primary: #e0913f; --primary-strong: #f0b072; --primary-soft: #33261a;
+        --primary-ring: color-mix(in srgb, #e0913f 32%, transparent);
+        --primary-glow: color-mix(in srgb, #e0913f 20%, transparent);
+        --primary-card-bg: linear-gradient(160deg, #2a2018 0%, var(--card) 62%);
+        --th-bg: #232020; --row-border: #2c2825; --row-hover: #262322;
+        --scroll-thumb: #4a443e; --sk-1: #2c2825; --sk-2: #383330;
+        --dot-ring: #12100f; --tl-line-a: #a85a22; --tl-line-b: #35302c;
+        --callout-bg: linear-gradient(135deg, #241d16, #2a231c);
+        --callout-border: #48392a;
+        --input-bg: #201d1c; --input-border: #3d3733; --chip-bg: #262322;
+        --chart-axis-label: #a8a29e; --chart-axis-line: #35302c;
+        --chart-split-line: #2c2825; --chart-zoom-bg: #35302c; --chart-icon: #a8a29e;
+        --chart-zoom-fill: rgba(224,145,63,.24);
+        --chart-area-from: rgba(224,145,63,.22); --chart-area-to: rgba(224,145,63,0);
+        --chart-tooltip-bg: rgba(10,8,6,.97); --chart-tooltip-border: #35302c;
+        --chart-tooltip-fg: #f5f1ee;
+        --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+        --shadow: 0 4px 24px rgba(0,0,0,.42);
+        --shadow-lg: 0 12px 40px rgba(0,0,0,.55);
+      }
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #12100f; --card: #1c1a19; --border: #35302c;
+      --text: #ece7e3; --sub: #a8a29e;
+      --red-light: #341a1a; --green-light: #112f24; --amber-light: #3a2c12;
+      --up-text: #f87171; --down-text: #34d399; --flat-text: #fbbf24;
+      --accent-text: #e8a56b; --flat-fg: #fbbf24;
+      --ser-futures: #e0913f; --ser-spot: #2dd4bf; --ser-lme: #818cf8;
+      --ser-ratio: #a78bfa; --ser-basis: #fbbf24; --ser-vol: #3f3a35;
+      --primary: #e0913f; --primary-strong: #f0b072; --primary-soft: #33261a;
+      --primary-ring: color-mix(in srgb, #e0913f 32%, transparent);
+      --primary-glow: color-mix(in srgb, #e0913f 20%, transparent);
+      --primary-card-bg: linear-gradient(160deg, #2a2018 0%, var(--card) 62%);
+      --th-bg: #232020; --row-border: #2c2825; --row-hover: #262322;
+      --scroll-thumb: #4a443e; --sk-1: #2c2825; --sk-2: #383330;
+      --dot-ring: #12100f; --tl-line-a: #a85a22; --tl-line-b: #35302c;
+      --callout-bg: linear-gradient(135deg, #241d16, #2a231c);
+      --callout-border: #48392a;
+      --input-bg: #201d1c; --input-border: #3d3733; --chip-bg: #262322;
+      --chart-axis-label: #a8a29e; --chart-axis-line: #35302c;
+      --chart-split-line: #2c2825; --chart-zoom-bg: #35302c; --chart-icon: #a8a29e;
+      --chart-zoom-fill: rgba(224,145,63,.24);
+      --chart-area-from: rgba(224,145,63,.22); --chart-area-to: rgba(224,145,63,0);
+      --chart-tooltip-bg: rgba(10,8,6,.97); --chart-tooltip-border: #35302c;
+      --chart-tooltip-fg: #f5f1ee;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+      --shadow: 0 4px 24px rgba(0,0,0,.42);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,.55);
+    }
+
+    /* ===== PRINT（数据报告存档/打印）===== */
+    @media print {
+      :root {
+        color-scheme: light !important;
+        --bg: #fff !important; --card: #fff !important;
+        --border: #d6d3d1 !important; --text: #1c1917 !important; --sub: #57534e !important;
+        --shadow: none !important; --shadow-sm: none !important; --shadow-lg: none !important;
+        --row-hover: #fff !important; --th-bg: #f5f5f4 !important;
+      }
+      .particles, .progress-bar, .back-top, .theme-switch, .table-more { display: none !important; }
+      .reveal { opacity: 1 !important; transform: none !important; }
+      .card, .qstat, .impact-card, .callout { break-inside: avoid; }
+      .hero, footer { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ========== 图标库（stroke 继承 currentColor，尺寸由 .ic 控制）========== -->
+<svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+  <symbol id="i-coil" viewBox="0 0 24 24">
+    <ellipse cx="12" cy="12" rx="9" ry="5.6" />
+    <ellipse cx="12" cy="12" rx="6.2" ry="3.7" />
+    <ellipse cx="12" cy="12" rx="3.3" ry="1.9" />
+  </symbol>
+  <symbol id="i-trend" viewBox="0 0 24 24">
+    <polyline points="3 16 9 10 13 14 21 6" />
+    <polyline points="15 6 21 6 21 12" />
+  </symbol>
+  <symbol id="i-scale" viewBox="0 0 24 24">
+    <line x1="12" y1="3.5" x2="12" y2="20.5" />
+    <line x1="5" y1="7" x2="19" y2="7" />
+    <path d="M5 7l-2.5 5.5a3 3 0 0 0 5 0z" />
+    <path d="M19 7l-2.5 5.5a3 3 0 0 0 5 0z" />
+    <line x1="8" y1="20.5" x2="16" y2="20.5" />
+  </symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8.6" />
+    <ellipse cx="12" cy="12" rx="3.8" ry="8.6" />
+    <line x1="3.4" y1="12" x2="20.6" y2="12" />
+  </symbol>
+  <symbol id="i-list" viewBox="0 0 24 24">
+    <line x1="9" y1="6.5" x2="20" y2="6.5" />
+    <line x1="9" y1="12" x2="20" y2="12" />
+    <line x1="9" y1="17.5" x2="20" y2="17.5" />
+    <line x1="4" y1="6.5" x2="4.6" y2="6.5" />
+    <line x1="4" y1="12" x2="4.6" y2="12" />
+    <line x1="4" y1="17.5" x2="4.6" y2="17.5" />
+  </symbol>
+  <symbol id="i-ruler" viewBox="0 0 24 24">
+    <rect x="2.6" y="8" width="18.8" height="8" rx="1.6" />
+    <line x1="7" y1="8" x2="7" y2="11.4" />
+    <line x1="11" y1="8" x2="11" y2="12.6" />
+    <line x1="15" y1="8" x2="15" y2="11.4" />
+    <line x1="19" y1="8" x2="19" y2="12.6" />
+  </symbol>
+  <symbol id="i-factory" viewBox="0 0 24 24">
+    <path d="M3 20V10l5 3V10l5 3V8l6 4v8z" />
+    <line x1="2.5" y1="20" x2="21.5" y2="20" />
+  </symbol>
+  <symbol id="i-cable" viewBox="0 0 24 24">
+    <path d="M3 6.5h4.5a4.5 4.5 0 0 1 4.5 4.5v2a4.5 4.5 0 0 0 4.5 4.5H21" />
+    <circle cx="3" cy="6.5" r="1.6" />
+    <circle cx="21" cy="17.5" r="1.6" />
+  </symbol>
+  <symbol id="i-tower" viewBox="0 0 24 24">
+    <path d="M12 3.2 4.4 20.8M12 3.2l7.6 17.6" />
+    <path d="M7.2 13.6h9.6M6 17.2h12" />
+    <line x1="12" y1="3.2" x2="12" y2="7.4" />
+  </symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24">
+    <rect x="6.4" y="6.4" width="11.2" height="11.2" rx="2" />
+    <rect x="10" y="10" width="4" height="4" rx="1" />
+    <line x1="9.4" y1="3" x2="9.4" y2="6.4" /><line x1="14.6" y1="3" x2="14.6" y2="6.4" />
+    <line x1="9.4" y1="17.6" x2="9.4" y2="21" /><line x1="14.6" y1="17.6" x2="14.6" y2="21" />
+    <line x1="3" y1="9.4" x2="6.4" y2="9.4" /><line x1="3" y1="14.6" x2="6.4" y2="14.6" />
+    <line x1="17.6" y1="9.4" x2="21" y2="9.4" /><line x1="17.6" y1="14.6" x2="21" y2="14.6" />
+  </symbol>
+  <symbol id="i-bulb" viewBox="0 0 24 24">
+    <path d="M12 3a6 6 0 0 0-3.6 10.8c.5.4.8 1 .9 1.6l.2 1.5h5l.2-1.5c.1-.6.4-1.2.9-1.6A6 6 0 0 0 12 3z" />
+    <line x1="9.6" y1="19.8" x2="14.4" y2="19.8" />
+  </symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8.5" />
+    <polyline points="12 7 12 12 16 14.2" />
+  </symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24">
+    <path d="M12 21s6.5-5.7 6.5-10.3A6.5 6.5 0 0 0 5.5 10.7C5.5 15.3 12 21 12 21z" />
+    <circle cx="12" cy="10.6" r="2.4" />
+  </symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24">
+    <path d="M12 3l7 2.8v5.4c0 4.4-2.9 8.3-7 9.8-4.1-1.5-7-5.4-7-9.8V5.8z" />
+    <polyline points="9 12 11.2 14.2 15.2 10.2" />
+  </symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24">
+    <path d="M20 12a8 8 0 1 1-2.4-5.7" />
+    <polyline points="20 4 20 9 15 9" />
+  </symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24">
+    <line x1="12" y1="19.5" x2="12" y2="5.5" />
+    <polyline points="6 11.5 12 5.5 18 11.5" />
+  </symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="4.2" />
+    <line x1="12" y1="2.6" x2="12" y2="5" /><line x1="12" y1="19" x2="12" y2="21.4" />
+    <line x1="2.6" y1="12" x2="5" y2="12" /><line x1="19" y1="12" x2="21.4" y2="12" />
+    <line x1="5.4" y1="5.4" x2="7.1" y2="7.1" /><line x1="16.9" y1="16.9" x2="18.6" y2="18.6" />
+    <line x1="18.6" y1="5.4" x2="16.9" y2="7.1" /><line x1="7.1" y1="16.9" x2="5.4" y2="18.6" />
+  </symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24">
+    <path d="M20.2 14.4A8.5 8.5 0 0 1 9.6 3.8a8.6 8.6 0 1 0 10.6 10.6z" />
+  </symbol>
+  <symbol id="i-auto" viewBox="0 0 24 24">
+    <rect x="3" y="4.5" width="18" height="12" rx="2" />
+    <line x1="9" y1="19.8" x2="15" y2="19.8" />
+    <line x1="12" y1="16.5" x2="12" y2="19.8" />
+  </symbol>
+</svg>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<div class="theme-switch" id="themeSwitch" role="group" aria-label="主题">
+  <button class="ts-btn" type="button" data-theme-mode="auto" aria-pressed="false"
+          title="跟随系统" aria-label="跟随系统">
+    <svg class="ic" aria-hidden="true"><use href="#i-auto" /></svg>
+  </button>
+  <button class="ts-btn" type="button" data-theme-mode="light" aria-pressed="false"
+          title="浅色" aria-label="浅色">
+    <svg class="ic" aria-hidden="true"><use href="#i-sun" /></svg>
+  </button>
+  <button class="ts-btn" type="button" data-theme-mode="dark" aria-pressed="false"
+          title="深色" aria-label="深色">
+    <svg class="ic" aria-hidden="true"><use href="#i-moon" /></svg>
+  </button>
+</div>
+
+<!-- Floating particles -->
+<div class="particles" id="particles"></div>
+
+<!-- HERO -->
+<section class="hero">
+  <!-- 纯 SVG 手绘背景：右侧铜线圈 + 底部铜排，零外链依赖 -->
+  <div class="hero-art" aria-hidden="true">
+    <svg viewBox="0 0 1200 580" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="cuCoil" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f0b072" />
+          <stop offset=".45" stop-color="#c2703d" />
+          <stop offset="1" stop-color="#7a3f18" />
+        </linearGradient>
+        <linearGradient id="cuBar" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#7a3f18" stop-opacity="0" />
+          <stop offset=".5" stop-color="#f0b072" stop-opacity=".85" />
+          <stop offset="1" stop-color="#7a3f18" stop-opacity="0" />
+        </linearGradient>
+        <radialGradient id="cuHalo">
+          <stop offset="0" stop-color="#e0913f" stop-opacity=".38" />
+          <stop offset="1" stop-color="#e0913f" stop-opacity="0" />
+        </radialGradient>
+      </defs>
+
+      <circle cx="1040" cy="300" r="330" fill="url(#cuHalo)" />
+
+      <!-- 铜线圈：一组同心椭圆（像从侧面看去的线盘） -->
+      <g class="coil-rotor" opacity=".5">
+        <g fill="none" stroke="url(#cuCoil)" stroke-width="1.6">
+          <ellipse cx="1040" cy="300" rx="292" ry="182" opacity=".22" />
+          <ellipse cx="1040" cy="300" rx="266" ry="166" opacity=".26" />
+          <ellipse cx="1040" cy="300" rx="240" ry="150" opacity=".30" />
+          <ellipse cx="1040" cy="300" rx="214" ry="134" opacity=".34" />
+          <ellipse cx="1040" cy="300" rx="188" ry="118" opacity=".38" />
+          <ellipse cx="1040" cy="300" rx="162" ry="101" opacity=".42" />
+          <ellipse cx="1040" cy="300" rx="136" ry="85"  opacity=".46" />
+          <ellipse cx="1040" cy="300" rx="110" ry="69"  opacity=".50" />
+          <ellipse cx="1040" cy="300" rx="84"  ry="52"  opacity=".54" />
+          <ellipse cx="1040" cy="300" rx="58"  ry="36"  opacity=".58" />
+        </g>
+      </g>
+
+      <!-- 铜排（母线）：三条水平亮条，高光缓缓扫过 -->
+      <g class="busbar-shine" opacity=".5">
+        <rect x="0" y="432" width="1200" height="3" fill="url(#cuBar)" />
+        <rect x="0" y="452" width="1200" height="2" fill="url(#cuBar)" opacity=".7" />
+        <rect x="0" y="468" width="1200" height="1.5" fill="url(#cuBar)" opacity=".5" />
+      </g>
+
+      <!-- 左下角稀疏点阵，补一点工业感 -->
+      <g fill="#e0913f" opacity=".16">
+        <circle cx="80" cy="120" r="2" /><circle cx="140" cy="196" r="1.6" />
+        <circle cx="56" cy="268" r="1.8" /><circle cx="196" cy="104" r="1.5" />
+        <circle cx="236" cy="240" r="2.2" /><circle cx="120" cy="344" r="1.6" />
+        <circle cx="300" cy="150" r="1.4" /><circle cx="360" cy="320" r="1.9" />
+      </g>
+    </svg>
+  </div>
+  <div class="hero-scrim"></div>
+
+  <div class="hero-inner">
+    <div class="hero-badge">
+      <span class="dot"></span> 每日 08:30 自动同步 · 上海期货交易所
+    </div>
+    <h1>沪铜价格趋势<br><span class="cu">电力设备采购锚点</span></h1>
+    <p>追踪沪铜连续合约结算价、国内现货 1# 电解铜与 LME 铜价，同步记录基差、沪伦比与年内位置，为线缆、金具、变压器的采购与报价提供价格锚点。</p>
+    <div class="hero-stats">
+      <div class="hero-stat is-primary">
+        <div class="val is-copper" id="heroFutures">—</div>
+        <div class="lab">沪铜连续 · 结算价（元/吨）</div>
+        <div class="sub2" id="heroFuturesDate">—</div>
+      </div>
+      <div class="hero-stat">
+        <div class="val" id="heroSpot">—</div>
+        <div class="lab">1# 电解铜现货（元/吨）</div>
+        <div class="sub2" id="heroSpotDate">—</div>
+      </div>
+      <div class="hero-stat">
+        <div class="val" id="heroLme">—</div>
+        <div class="lab">LME 铜（美元/吨）</div>
+        <div class="sub2" id="heroLmeDate">—</div>
+      </div>
+      <div class="hero-stat">
+        <div class="val" id="heroHistory">—</div>
+        <div class="lab">历史序列 / 起始年</div>
+        <div class="sub2" id="heroHistoryDesc">—</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="container">
+
+  <!-- ========== 当前铜价（P-1）========== -->
+  <div class="reveal">
+    <div class="price-head">
+      <div class="section-title" id="currentPriceTitle">
+        <svg class="ic" aria-hidden="true"><use href="#i-coil" /></svg><span id="currentPriceText">铜价加载中…</span>
+      </div>
+      <span class="trend-badge" id="priceTrendBadge">加载中</span>
+    </div>
+    <div class="price-grid" id="priceGrid">
+      <!-- 沪铜连续：主指标，跨列大卡，尺寸/配色均高于其余两张 -->
+      <div class="price-cell is-primary reveal">
+        <div class="p-ribbon">主指标</div>
+        <div class="p-label">沪铜连续 · 结算价</div>
+        <div class="p-value counter skeleton" id="counterFutures" data-target="0" data-prefix="" data-suffix="">--</div>
+        <div class="p-change skeleton" id="changeFutures">—</div>
+        <div class="ohlc-grid">
+          <div class="oc"><b id="ocOpen">—</b><span>开</span></div>
+          <div class="oc"><b id="ocHigh">—</b><span>高</span></div>
+          <div class="oc"><b id="ocLow">—</b><span>低</span></div>
+          <div class="oc"><b id="ocClose">—</b><span>收盘</span></div>
+        </div>
+        <div class="p-note" id="futuresNote">上海期货交易所 · 元/吨</div>
+      </div>
+      <div class="price-cell reveal">
+        <div class="p-label">1# 电解铜 · 现货均价</div>
+        <div class="p-value counter skeleton" id="counterSpot" data-target="0" data-prefix="" data-suffix="">--</div>
+        <div class="p-change skeleton" id="changeSpot">—</div>
+        <div class="p-note" id="spotNote">—</div>
+      </div>
+      <div class="price-cell reveal">
+        <div class="p-label">LME 铜 · 3 月</div>
+        <div class="p-value counter skeleton" id="counterLme" data-target="0" data-prefix="" data-suffix="">--</div>
+        <div class="p-change skeleton" id="changeLme">—</div>
+        <div class="p-note" id="lmeNote">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 涨跌指示（P-2）========== -->
+  <div class="quick-stats reveal">
+    <div class="qstat" id="statDodCard">
+      <div class="label">沪铜结算价 · 较前一交易日</div>
+      <div class="value"><span class="counter" id="statDod" data-target="0" data-prefix="" data-suffix="">0</span></div>
+      <div class="suffix" id="statDodDesc">—</div>
+    </div>
+    <div class="qstat" id="statWowCard">
+      <div class="label">沪铜结算价 · 较一周前</div>
+      <div class="value"><span class="counter" id="statWow" data-target="0" data-prefix="" data-suffix="">0</span></div>
+      <div class="suffix" id="statWowDesc">—</div>
+    </div>
+    <div class="qstat" id="statYtdCard">
+      <div class="label">沪铜结算价 · 较年初</div>
+      <div class="value"><span class="counter" id="statYtd" data-target="0" data-prefix="" data-suffix="">0</span></div>
+      <div class="suffix" id="statYtdDesc">—</div>
+    </div>
+    <div class="qstat" id="statYoyCard">
+      <div class="label">沪铜结算价 · 较去年同期</div>
+      <div class="value"><span class="counter" id="statYoy" data-target="0" data-prefix="" data-suffix="">0</span></div>
+      <div class="suffix" id="statYoyDesc">—</div>
+    </div>
+  </div>
+
+  <!-- ========== 价格走势（P-3）========== -->
+  <div class="card reveal">
+    <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-trend" /></svg>沪铜价格走势<span class="title-tag">元/吨</span></div>
+    <div class="range-bar">
+      <div class="range-group" id="rangeGroup" role="group" aria-label="图表周期">
+        <button class="rg-btn" type="button" data-range="3m" aria-pressed="false">近 3 月</button>
+        <button class="rg-btn" type="button" data-range="1y" aria-pressed="true">近 1 年</button>
+        <button class="rg-btn" type="button" data-range="5y" aria-pressed="false">近 5 年</button>
+        <button class="rg-btn" type="button" data-range="all" aria-pressed="false">全部</button>
+      </div>
+      <span class="range-hint" id="rangeHint">—</span>
+    </div>
+    <div class="chart-legend">
+      <span class="lg" style="color:var(--ser-futures)"><i class="sw" style="background:currentColor"></i>沪铜连续收盘价</span>
+      <span class="lg" style="color:var(--ser-futures)"><i class="sw sw-dash"></i>结算价</span>
+      <span class="lg" style="color:var(--ser-spot)"><i class="sw" style="background:currentColor"></i>现货 1# 电解铜</span>
+      <span class="lg" style="color:var(--ser-vol)"><i class="sw" style="background:currentColor"></i>成交量（副图）</span>
+      <span class="lg lg-hint">滚轮缩放 · 现货线仅覆盖自建区间</span>
+    </div>
+    <div class="chart-wrap"><div id="mainChart" style="width:100%;height:100%"></div></div>
+  </div>
+
+  <!-- ========== 年内位置 + 连续涨跌（P-4 / P-5）========== -->
+  <div class="card reveal">
+    <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-scale" /></svg><span id="posTitle">年内区间位置</span><span class="title-tag">结算价口径</span></div>
+    <div class="pos-track">
+      <div class="pos-fill" id="posFill" style="width:0%"></div>
+      <div class="pos-mark" id="posMark" style="left:0%"></div>
+    </div>
+    <div class="pos-scale">
+      <span>年内最低 <b id="posLow">—</b></span>
+      <span id="posMid">—</span>
+      <span>年内最高 <b id="posHigh">—</b></span>
+    </div>
+    <div class="pos-verdict" id="posVerdict">—</div>
+    <div class="mini-stats">
+      <div class="ms-item">
+        <div class="k">连续涨跌（交易日）</div>
+        <div class="v" id="msStreak">—</div>
+      </div>
+      <div class="ms-item">
+        <div class="k">连涨/连跌累计（元/吨）</div>
+        <div class="v" id="msStreakSum">—</div>
+      </div>
+      <div class="ms-item">
+        <div class="k">年内振幅（元/吨）</div>
+        <div class="v" id="msAmp">—</div>
+      </div>
+      <div class="ms-item">
+        <div class="k">年内最大单日波动（元/吨）</div>
+        <div class="v" id="msMaxSwing">—</div>
+      </div>
+      <div class="ms-item">
+        <div class="k">持仓量变化（较约 1 个月前）</div>
+        <div class="v" id="msOi">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 沪伦比 & 现货基差（P-7）========== -->
+  <div class="card reveal">
+    <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-globe" /></svg>内外盘信号<span class="title-tag">沪伦比 · 基差</span></div>
+    <div class="callout">
+      <div class="callout-icon"><svg class="ic" aria-hidden="true"><use href="#i-bulb" /></svg></div>
+      <div class="callout-text">
+        <strong>沪伦比</strong> = 沪铜结算价（元/吨）÷ LME 铜价（美元/吨），未扣汇率，是一个<strong>名义比值</strong>；
+        <strong>基差</strong> = 现货均价 − 期货结算价，为正即现货升水。前者看内外盘价差，后者看国内现货松紧。
+      </div>
+    </div>
+    <div class="dual-grid">
+      <div>
+        <div class="sub-title"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-globe" /></svg>沪伦比走势</div>
+        <div class="sub-desc" id="ratioDesc">—</div>
+        <div class="chart-wrap sm"><div id="ratioChart" style="width:100%;height:100%"></div></div>
+      </div>
+      <div>
+        <div class="sub-title"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-scale" /></svg>现货基差走势（元/吨）</div>
+        <div class="sub-desc" id="basisDesc">—</div>
+        <div class="chart-wrap sm"><div id="basisChart" style="width:100%;height:100%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 换算器 + 用铜成本（P-6 / P-8）========== -->
+  <div class="card reveal">
+    <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-ruler" /></svg>报价换算工具<span class="title-tag">按沪铜结算价</span></div>
+    <div class="conv-grid">
+      <div>
+        <div class="conv-input-row">
+          <label for="convInput">沪铜价格</label>
+          <input class="conv-input" id="convInput" type="number" inputmode="decimal" step="1" value="0" aria-label="沪铜价格（元/吨）" />
+          <span style="font-size:12.5px;color:var(--sub);font-weight:600">元/吨</span>
+        </div>
+        <div class="conv-out">
+          <div class="conv-cell accent">
+            <div class="k">元/公斤</div>
+            <div class="v"><span id="cvKg">—</span><span class="u">元/kg</span></div>
+          </div>
+          <div class="conv-cell accent">
+            <div class="k">元/斤</div>
+            <div class="v"><span id="cvJin">—</span><span class="u">元/斤</span></div>
+          </div>
+          <div class="conv-cell">
+            <div class="k">元/克</div>
+            <div class="v"><span id="cvG">—</span><span class="u">元/g</span></div>
+          </div>
+          <div class="conv-cell">
+            <div class="k">万元/吨</div>
+            <div class="v"><span id="cvWan">—</span><span class="u">万元</span></div>
+          </div>
+        </div>
+        <div class="conv-note">
+          常用口径：<strong>元/公斤 = 元/吨 ÷ 1000</strong>，<strong>元/斤 = 元/吨 ÷ 2000</strong>。
+          铜材小额贸易多按元/公斤结算，工程报价仍以元/吨为主。输入框可改成任意价格试算。
+        </div>
+      </div>
+      <div>
+        <div class="sub-title" style="font-size:13px;font-weight:700;margin-bottom:5px">典型用铜成本速查</div>
+        <div class="sub-desc" style="font-size:11.5px;color:var(--sub);margin-bottom:10px">
+          按上方价格折算。用铜量取理论值（铜密度 8.9 g/cm³），实际含接头／冗余会更高。
+        </div>
+        <div class="tbl-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>品类</th>
+                <th>参考用铜量</th>
+                <th class="th-primary">用铜成本</th>
+              </tr>
+            </thead>
+            <tbody id="costBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 对业务的影响 ========== -->
+  <div class="section-title reveal"><svg class="ic" aria-hidden="true"><use href="#i-factory" /></svg>铜价波动的实际影响</div>
+  <div class="impact-grid">
+    <div class="impact-card n1 reveal">
+      <div class="ic-icon"><svg class="ic" aria-hidden="true"><use href="#i-cable" /></svg></div>
+      <div class="ic-title">线缆 · 铜芯电缆</div>
+      <div class="ic-body">
+        铜占铜芯电缆成本的 <strong>60%~75%</strong>。以 YJV 4×50 为例，每公里用铜约 <span class="ic-dyn" id="icCableKg">—</span> kg，
+        铜价每涨 1,000 元/吨，单公里成本抬升约 <span class="ic-dyn" id="icCablePer1000">—</span> 元；
+        年内振幅 <span class="ic-dyn" id="icCableAmp">—</span> 元/吨，对应单公里成本波动 <span class="ic-dyn" id="icCableAmpCost">—</span> 元。
+      </div>
+    </div>
+    <div class="impact-card n2 reveal">
+      <div class="ic-icon"><svg class="ic" aria-hidden="true"><use href="#i-tower" /></svg></div>
+      <div class="ic-title">复合绝缘横担 · 金具</div>
+      <div class="ic-body">
+        横担本体是复合材料，铜主要用于<strong>抱箍、连接金具、接地件</strong>，单套用铜约 <span class="ic-dyn" id="icCrossarmKg">—</span> kg。
+        金具对铜价的敏感度低于电缆，但批量交付时仍是主要浮动项；年内铜价波动对单套金具成本的摆幅约
+        <span class="ic-dyn" id="icCrossarmSwing">—</span> 元。
+      </div>
+    </div>
+    <div class="impact-card n3 reveal">
+      <div class="ic-icon"><svg class="ic" aria-hidden="true"><use href="#i-coil" /></svg></div>
+      <div class="ic-title">变压器 · 绕组</div>
+      <div class="ic-body">
+        配电变压器（如 S13-M-400kVA）铜绕组约 <span class="ic-dyn" id="icTrafoKg">—</span> kg/台，
+        铜价每变动 1,000 元/吨，单台材料成本变动约 <span class="ic-dyn" id="icTrafoPer1000">—</span> 元。
+        这是变压器报价单里最容易失控的一项，通常按「铜价联动条款」处理。
+      </div>
+    </div>
+    <div class="impact-card n4 reveal">
+      <div class="ic-icon"><svg class="ic" aria-hidden="true"><use href="#i-cpu" /></svg></div>
+      <div class="ic-title">采购节奏 · 下单窗口</div>
+      <div class="ic-body">
+        当前铜价处于年内 <span class="ic-dyn" id="icPosition">—</span> 分位，现货对期货<span id="icBasisWord">—</span>
+        <span class="ic-dyn" id="icBasisVal">—</span> 元/吨。现货升水扩大通常意味着<strong>现货偏紧、短期难跌</strong>；
+        升水收窄或转贴水则说明供应宽松，可以放慢采购节奏、等回调。
+      </div>
+    </div>
+    <div class="impact-card n5 reveal">
+      <div class="ic-icon"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></div>
+      <div class="ic-title">价格锚点 · 报价有效期</div>
+      <div class="ic-body">
+        近一年日均波动 <span class="ic-dyn" id="icAvgSwing">—</span> 元/吨，最大单日波动 <span class="ic-dyn" id="icMaxSwing">—</span> 元/吨。
+        报价有效期通常按「波动 ±1.5% 或 3 个交易日」设定：超出即重新核价，避免用旧铜价签下新订单。
+      </div>
+    </div>
+    <div class="impact-card n6 reveal">
+      <div class="ic-icon"><svg class="ic" aria-hidden="true"><use href="#i-globe" /></svg></div>
+      <div class="ic-title">内外盘 · 进口与套利</div>
+      <div class="ic-body">
+        沪伦比当前 <span class="ic-dyn" id="icRatio">—</span>（近一年区间 <span class="ic-dyn" id="icRatioRange">—</span>）。
+        比值走高说明国内相对外盘偏贵，进口铜盈利窗口打开、后续到港量或增加；比值走低则相反。
+        注意该比值<strong>未扣汇率</strong>，只作趋势参考。
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 历史数据表 ========== -->
+  <div class="card reveal">
+    <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-list" /></svg><span id="tableSectionText">历史交易日数据</span></div>
+    <div class="tbl-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>交易日</th>
+            <th>趋势</th>
+            <th class="th-primary">结算价<span class="th-sub">元/吨</span></th>
+            <th>收盘价<span class="th-sub">元/吨</span></th>
+            <th>涨跌<span class="th-sub">元/吨</span></th>
+            <th>涨跌幅<span class="th-sub">%</span></th>
+            <th>成交量<span class="th-sub">手</span></th>
+            <th>持仓量<span class="th-sub">手</span></th>
+            <th>现货均价<span class="th-sub">元/吨</span></th>
+            <th>基差<span class="th-sub">元/吨</span></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <button class="table-more" id="tableMore" type="button" hidden>显示更多</button>
+  </div>
+
+  <!-- ========== 数据源状态 ========== -->
+  <div class="card reveal">
+    <div class="section-title"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>数据源状态<span class="title-tag" id="healthTag">—</span></div>
+    <div class="src-grid" id="srcGrid"></div>
+    <div class="conv-note" id="metaNotes"></div>
+  </div>
+
+</div>
+
+<button class="back-top" id="backTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="回到顶部">
+  <svg class="ic" aria-hidden="true"><use href="#i-arrow-up" /></svg>
+</button>
+
+<footer>
+  <p>数据来源：上海期货交易所 · 新浪财经 · 生意社 &nbsp;|&nbsp; 仅供参考，不构成任何采购或投资建议</p>
+  <p style="margin-top:6px">
+    <svg class="ic ic-sm" aria-hidden="true"><use href="#i-pin" /></svg>指标口径：沪铜连续合约结算价 · 现货为 1# 电解铜多供应商均价
+    &nbsp;|&nbsp; 更新至 <span id="updateDate"></span>
+    &nbsp;|&nbsp; <a href="https://github.com/ToniaXuu" target="_blank" rel="noopener">@ToniaXuu</a>
+  </p>
+</footer>
+
+<script>
+// ================================================================
+// 沪铜价格趋势 · 动态数据驱动
+// 数据来源: data.json（由 GitHub Actions 每日 08:30 自动更新）
+// 口径定义（改动前先读）：主指标 = 沪铜连续结算价；现货 = 1# 电解铜多供应商均价；
+// 基差 = 现货均价 − 期货结算价；沪伦比 = 沪铜结算价 ÷ LME(美元/吨)，未扣汇率。
+// ================================================================
+
+// ============ 浮动粒子（不依赖数据，提前渲染）============
+(function particles() {
+  const container = document.getElementById('particles');
+  if (!container) return;
+  // 铜色系粒子，和油价项目的多彩粒子刻意区分
+  const colors = ['#e0913f','#c2703d','#f0b072','#4f6bed','#2dd4bf','#fbbf24'];
+  const isMobile = window.innerWidth < 768;
+  const count = isMobile ? 12 : 28;
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const size = Math.random() * 6 + 2;
+    p.style.cssText = `
+      width:${size}px; height:${size}px;
+      left:${Math.random()*100}%;
+      background:${colors[Math.floor(Math.random()*colors.length)]};
+      animation-duration:${Math.random()*8+8}s;
+      animation-delay:${Math.random()*10}s;
+    `;
+    container.appendChild(p);
+  }
+})();
+
+// ============ 进度条 ============
+let _scrollPending = false;
+window.addEventListener('scroll', () => {
+  if (!_scrollPending) {
+    _scrollPending = true;
+    requestAnimationFrame(() => {
+      const scrollH = document.documentElement.scrollHeight - window.innerHeight;
+      const st = window.scrollY;
+      document.getElementById('progressBar').style.width = scrollH > 0 ? (st / scrollH) * 100 + '%' : '0%';
+      document.getElementById('backTop').classList.toggle('visible', st > 600);
+      _scrollPending = false;
+    });
+  }
+}, { passive: true });
+
+// ============ Scroll Reveal Observer ============
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1, rootMargin: '0px 0px -30px 0px' });
+
+// ============ 数字格式化 ============
+// 价格在元/吨 量级是 6 位数，不分组根本读不出来，所以全站统一千分位。
+function groupNum(v, decimals) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  const d = decimals === undefined ? 0 : decimals;
+  const neg = v < 0;
+  const parts = Math.abs(v).toFixed(d).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return (neg ? '-' : '') + parts.join('.');
+}
+function signed(v, decimals) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  const d = decimals === undefined ? 0 : decimals;
+  if (v === 0) return groupNum(0, d);
+  return (v > 0 ? '+' : '-') + groupNum(Math.abs(v), d);
+}
+function dirClass(v) { return v > 0 ? 'up' : v < 0 ? 'down' : 'flat'; }
+function fmtDate(iso) {
+  const p = String(iso).split('-');
+  if (p.length !== 3) return iso;
+  return Number(p[1]) + '月' + Number(p[2]) + '日';
+}
+function fmtFull(iso) {
+  const p = String(iso).split('-');
+  if (p.length !== 3) return iso;
+  return p[0] + '年' + Number(p[1]) + '月' + Number(p[2]) + '日';
+}
+function weekdayCN(iso) {
+  const d = new Date(iso + 'T00:00:00+08:00');
+  if (isNaN(d.getTime())) return '';
+  return '周' + '日一二三四五六'[d.getDay()];
+}
+function shiftDate(iso, days) {
+  // 必须用 UTC 做日期算术：`new Date(iso + 'T00:00:00+08:00')` 解析成 UTC 后
+  // 会落到前一天 16:00，再 toISOString() 取的就是前一天 —— 白白少一天。
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// ============ Counter Animation ============
+function animateCounter(el) {
+  const target = parseFloat(el.dataset.target);
+  if (isNaN(target)) return;
+  const prefix = el.dataset.prefix || '';
+  const suffix = el.dataset.suffix || '';
+  const decimals = (el.dataset.decimals !== undefined && el.dataset.decimals !== '')
+    ? parseInt(el.dataset.decimals, 10) : 0;
+  const duration = 1500;
+  const start = performance.now();
+  const finish = () => { el.textContent = prefix + groupNum(target, decimals) + suffix; };
+
+  function update(ts) {
+    // rAF 时间戳取的是帧起点，可能早于同帧内调用的 performance.now()，
+    // 不夹紧下限会出现 progress<0 → 数字短暂显示成负值
+    const progress = Math.max(0, Math.min((ts - start) / duration, 1));
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = prefix + groupNum(target * eased, decimals) + suffix;
+    if (progress < 1) requestAnimationFrame(update);
+    else finish();
+  }
+  requestAnimationFrame(update);
+  // 兜底：rAF 被节流/挂起时（后台标签页），到点强制落到终值
+  setTimeout(finish, duration + 400);
+}
+const counterObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) { animateCounter(e.target); counterObserver.unobserve(e.target); }
+  });
+}, { threshold: 0.4 });
+
+// ============ 内嵌回退数据（data.json 加载失败时使用）============
+// ⚠️ 只需保证「字段齐全 + 能渲染」，不必与线上逐年同步；正常情况一律以 data.json 为准。
+const FALLBACK_DATA = {
+  "meta": {
+    "lastUpdated": "2026-09-29", "primary": "futures", "primaryName": "沪铜连续",
+    "spotSince": "2026-09-15", "lmeSince": "2016-09-30", "historySince": "2005-01-04",
+    "unit": "元/吨", "lmeUnit": "美元/吨", "spotDays": 1, "lmeDays": 1,
+    "dataSource": "上海期货交易所 · 新浪财经 · 生意社", "warnings": [], "notes": [],
+    "realtime": null
+  },
+  "futures": [
+    { "date": "2026-09-24", "open": 110420, "high": 110570, "low": 109930, "close": 110130, "settle": 110210, "volume": 73438, "openInterest": 178590, "change": -200, "changePct": -0.18 },
+    { "date": "2026-09-28", "open": 109960, "high": 109960, "low": 109210, "close": 109440, "settle": 109430, "volume": 66988, "openInterest": 185247, "change": -690, "changePct": -0.63 },
+    { "date": "2026-09-29", "open": 109240, "high": 109810, "low": 108970, "close": 109570, "settle": 109300, "volume": 73673, "openInterest": 185221, "change": 130, "changePct": 0.12 }
+  ],
+  "spot": [
+    { "date": "2026-09-29", "price": 110878, "low": 110710, "high": 110990, "count": 3, "basis": 1578,
+      "suppliers": [{ "name": "上海华通", "price": 110990 }, { "name": "广东南储", "price": 110710 }, { "name": "上海有色", "price": 110935 }] }
+  ],
+  "lme": [{ "date": "2026-09-30", "price": 14463.5, "futuresBase": 109300, "ratio": 7.56, "intraday": true }],
+  "sourceHealth": {}
+};
+
+// ============ 全局状态 ============
+let DATA = null;        // 原始 data.json
+let FUT = [];           // 期货序列（date 升序，仅已结算交易日）
+let SPOT = [];          // 现货序列（升序）
+let LME = [];           // LME 序列（升序）
+let META = {};
+let CUR_RANGE = '1y';
+let TABLE_LIMIT = 30;
+let dataLoadFailed = false;
+let retryBtnAdded = false;
+let _chartData = null;
+
+// ============ 工具：在升序序列里找「≤ date 的最后一条」的下标（二分）============
+function lastIndexOnOrBefore(series, dateStr, key) {
+  const k = key || 'date';
+  let lo = 0, hi = series.length - 1, ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (series[mid][k] <= dateStr) { ans = mid; lo = mid + 1; }
+    else { hi = mid - 1; }
+  }
+  return ans;
+}
+// 取结算价，缺失时回退收盘价（连续合约早期没有结算价字段）
+function settleOf(row) {
+  return (row.settle != null && row.settle !== 0) ? row.settle : row.close;
+}
+
+// ================================================================
+// 主流程
+// ================================================================
+async function init() {
+  let raw;
+  try {
+    const resp = await fetch('./data.json', { cache: 'no-cache' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    raw = await resp.json();
+    dataLoadFailed = false;
+  } catch (err) {
+    console.warn('data.json 加载失败，使用内嵌回退数据:', err.message);
+    raw = FALLBACK_DATA;
+    dataLoadFailed = true;
+  }
+
+  DATA = raw;
+  META = raw.meta || {};
+  FUT = (raw.futures || []).slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  SPOT = (raw.spot || []).slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  LME = (raw.lme || []).slice().sort((a, b) => a.date < b.date ? -1 : 1);
+
+  if (!FUT.length) {
+    document.getElementById('currentPriceText').textContent = '暂无铜价数据';
+    console.error('data.json 中没有 futures 序列');
+    return;
+  }
+
+  const last = FUT[FUT.length - 1];
+  const lastSettle = settleOf(last);
+  const lastSpot = SPOT.length ? SPOT[SPOT.length - 1] : null;
+  const lastLme = LME.length ? LME[LME.length - 1] : null;
+
+  // ---- 标题 / 更新日期 ----
+  document.getElementById('currentPriceText').textContent =
+    '沪铜最新行情 · ' + fmtDate(last.date) + '（' + weekdayCN(last.date) + '）';
+  document.getElementById('updateDate').textContent = fmtFull(META.lastUpdated || last.date);
+
+  // ---- Hero ----
+  setCounter('heroFutures', lastSettle, 0);
+  document.getElementById('heroFuturesDate').textContent = fmtDate(last.date) + ' 结算';
+  document.getElementById('heroFutures').className =
+    'val ' + (last.change > 0 ? 'is-up' : last.change < 0 ? 'is-down' : 'is-copper');
+
+  if (lastSpot) {
+    setCounter('heroSpot', lastSpot.price, 0);
+    document.getElementById('heroSpotDate').textContent =
+      fmtDate(lastSpot.date) + ' · ' + (lastSpot.count || 1) + ' 家均价';
+  } else {
+    document.getElementById('heroSpot').textContent = '—';
+    document.getElementById('heroSpotDate').textContent = '现货源未接入';
+  }
+
+  if (lastLme) {
+    setCounter('heroLme', lastLme.price, 0);
+    document.getElementById('heroLmeDate').textContent =
+      fmtDate(lastLme.date) + (lastLme.intraday ? ' · 盘中' : '');
+  } else {
+    document.getElementById('heroLme').textContent = '—';
+    document.getElementById('heroLmeDate').textContent = 'LME 源未接入';
+  }
+
+  document.getElementById('heroHistory').textContent = groupNum(FUT.length, 0) + ' 条';
+  document.getElementById('heroHistoryDesc').textContent =
+    String(META.historySince || FUT[0].date).slice(0, 4) + ' 年起 · 日线';
+
+  // ---- 趋势徽标 ----
+  const badge = document.getElementById('priceTrendBadge');
+  const chg = last.change;
+  if (chg === null || chg === undefined) {
+    badge.textContent = '— 无对比数据';
+    badge.className = 'trend-badge flat';
+  } else if (chg > 0) {
+    badge.textContent = '▲ 上涨 ' + signed(chg, 0) + ' 元/吨（' + signed(last.changePct, 2) + '%）';
+    badge.className = 'trend-badge up';
+  } else if (chg < 0) {
+    badge.textContent = '▼ 下跌 ' + signed(chg, 0) + ' 元/吨（' + signed(last.changePct, 2) + '%）';
+    badge.className = 'trend-badge down';
+  } else {
+    badge.textContent = '— 持平';
+    badge.className = 'trend-badge flat';
+  }
+
+  // ---- 三大指标卡（P-1）----
+  setCounter('counterFutures', lastSettle, 0);
+  setChange('changeFutures', last.change, last.changePct, '较前结算价');
+  document.getElementById('ocOpen').textContent = groupNum(last.open, 0);
+  document.getElementById('ocHigh').textContent = groupNum(last.high, 0);
+  document.getElementById('ocLow').textContent = groupNum(last.low, 0);
+  document.getElementById('ocClose').textContent = groupNum(last.close, 0);
+
+  // 主卡脚注：展示盘中参考快照（L3 源）。它是快照不是实时，必须把时间写清楚。
+  const rt = META.realtime;
+  const noteEl = document.getElementById('futuresNote');
+  if (rt && rt.price) {
+    const t = String(rt.time || '');
+    const hhmm = t.length >= 4 ? t.slice(0, 2) + ':' + t.slice(2, 4) : '';
+    noteEl.innerHTML = '上海期货交易所 · 元/吨<br>盘中参考 ' +
+      '<b style="color:var(--primary-strong)">' + groupNum(rt.price, 0) + '</b>' +
+      '（' + fmtDate(rt.date) + ' ' + hhmm + ' 快照）';
+    noteEl.title = '快照时间 ' + (META.lastRunAt || '') + '，非实时行情';
+  } else {
+    noteEl.textContent = '上海期货交易所 · 元/吨';
+  }
+
+  if (lastSpot) {
+    setCounter('counterSpot', lastSpot.price, 0);
+    const prevSpot = SPOT.length >= 2 ? SPOT[SPOT.length - 2] : null;
+    if (prevSpot) {
+      setChange('changeSpot', lastSpot.price - prevSpot.price, null, '较上一次报价');
+    } else {
+      const el = document.getElementById('changeSpot');
+      el.classList.remove('skeleton');
+      el.textContent = '— 序列仅 1 个交易日';
+      el.className = 'p-change';
+    }
+    const sup = (lastSpot.suppliers || []).map(s => s.name + ' ' + groupNum(s.price, 0)).join('<br>');
+    document.getElementById('spotNote').innerHTML =
+      '区间 ' + groupNum(lastSpot.low, 0) + ' ~ ' + groupNum(lastSpot.high, 0) +
+      '<br>基差 <b style="color:' + (lastSpot.basis > 0 ? 'var(--up-text)' : 'var(--down-text)') + '">' +
+      signed(lastSpot.basis, 0) + '</b> 元/吨' +
+      (sup ? '<div style="margin-top:6px;opacity:.85">' + sup + '</div>' : '');
+  } else {
+    document.getElementById('counterSpot').classList.remove('skeleton');
+    document.getElementById('counterSpot').textContent = '—';
+    document.getElementById('changeSpot').classList.remove('skeleton');
+    document.getElementById('changeSpot').textContent = '现货源不可用';
+    document.getElementById('spotNote').textContent = '现货数据获取失败';
+  }
+
+  if (lastLme) {
+    setCounter('counterLme', lastLme.price, 0);
+    const prevLme = LME.length >= 2 ? LME[LME.length - 2] : null;
+    if (prevLme) {
+      setChange('changeLme', lastLme.price - prevLme.price, null, '较前一交易日', '美元/吨');
+    } else {
+      const el = document.getElementById('changeLme');
+      el.classList.remove('skeleton');
+      el.textContent = '— 序列仅 1 个交易日';
+      el.className = 'p-change';
+    }
+    document.getElementById('lmeNote').innerHTML =
+      '沪伦比 <b style="color:var(--primary-strong)">' +
+      (lastLme.ratio != null ? lastLme.ratio : '—') + '</b>' +
+      '<br><span style="opacity:.85">' +
+      (lastLme.intraday ? '盘中价，收盘后刷新' : 'LME 3 月电子盘') + '</span>';
+  } else {
+    document.getElementById('counterLme').classList.remove('skeleton');
+    document.getElementById('counterLme').textContent = '—';
+    document.getElementById('changeLme').classList.remove('skeleton');
+    document.getElementById('changeLme').textContent = 'LME 源不可用';
+    document.getElementById('lmeNote').textContent = '沪伦比不可用';
+  }
+
+  // ---- 其余区块 ----
+  renderChangeCards();
+  renderPosition();
+  renderImpactCards(lastSettle, lastSpot, lastLme);
+  initConverter(lastSettle);
+  renderTable();
+  renderHealth(raw.sourceHealth);
+
+  _chartData = { fut: FUT, spot: SPOT, lme: LME };
+  renderMainChart();
+  renderRatioChart();
+  renderBasisChart();
+  bindRangeButtons();
+
+  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+  document.querySelectorAll('.counter').forEach(el => counterObserver.observe(el));
+
+  if (dataLoadFailed && !retryBtnAdded) showDataWarning();
+}
+
+// ============ 计数器辅助 ============
+function setCounter(id, val, decimals) {
+  const el = document.getElementById(id);
+  if (!el || val === null || val === undefined || isNaN(val)) return;
+  el.dataset.target = val;
+  if (decimals !== undefined) el.dataset.decimals = decimals;
+  el.classList.remove('skeleton');
+}
+// 有符号计数器：+1,020 / -560。
+// 方向靠符号 + 颜色共同表达 —— 只靠颜色在色弱用户和黑白打印下会丢信息。
+function setSignedCounter(id, val, decimals) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('skeleton');
+  if (val === null || val === undefined || isNaN(val)) {
+    el.classList.remove('counter');
+    el.textContent = '—';
+    return;
+  }
+  el.dataset.prefix = val > 0 ? '+' : val < 0 ? '-' : '';
+  setCounter(id, Math.abs(val), decimals);
+}
+
+// ============ 变动文本 ============
+function setChange(id, diff, pct, label, unit) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('skeleton');
+  const u = unit || '元/吨';
+  if (diff === null || diff === undefined || isNaN(diff)) {
+    el.textContent = '— ' + (label || '变动');
+    el.className = 'p-change';
+    return;
+  }
+  const tail = (pct !== null && pct !== undefined && !isNaN(pct))
+    ? '（' + signed(pct, 2) + '%）' : '';
+  if (diff === 0) {
+    el.textContent = '— ' + (label || '持平');
+    el.className = 'p-change';
+  } else if (diff > 0) {
+    el.textContent = '▲ ' + label + ' ' + signed(diff, 0) + ' ' + u + tail;
+    el.className = 'p-change up';
+  } else {
+    el.textContent = '▼ ' + label + ' ' + signed(diff, 0) + ' ' + u + tail;
+    el.className = 'p-change down';
+  }
+}
+
+// ============ 涨跌指示四卡（P-2）============
+// 全部走「结算价」口径。基准选择：
+//   较前一交易日 = 序列倒数第 2 条
+//   较一周前     = 往前推 5 个交易日（用交易日而非自然日，天然避开节假日）
+//   较年初       = 本年第一条之前的那条（没有上一年数据则退到序列首条）
+//   较去年同期   = 「去年同月同日」或之前最近的交易日
+function renderChangeCards() {
+  const n = FUT.length;
+  if (n < 2) return;
+  const cur = FUT[n - 1];
+  const curV = settleOf(cur);
+
+  [['statDodCard', 'statDod', 'statDodDesc', '较前一交易日', n - 2],
+   ['statWowCard', 'statWow', 'statWowDesc', '较一周前', n - 6]].forEach(s => {
+    const [cardId, valId, descId, label, idx] = s;
+    const cardEl = document.getElementById(cardId);
+    const valEl = document.getElementById(valId);
+    const descEl = document.getElementById(descId);
+    if (idx < 0) {
+      valEl.textContent = '—';
+      valEl.classList.remove('counter');
+      descEl.textContent = '历史长度不足（需 ' + (label === '较一周前' ? 6 : 2) + ' 个交易日）';
+      cardEl.className = 'qstat';
+      return;
+    }
+    const ref = FUT[idx];
+    const refV = settleOf(ref);
+    const diff = Math.round(curV - refV);
+    const pct = refV ? (diff / refV * 100) : 0;
+    setSignedCounter(valId, diff, 0);
+    descEl.textContent = fmtDate(ref.date) + ' ' + groupNum(refV, 0) + ' · ' + signed(pct, 2) + '%';
+    cardEl.className = 'qstat ' + dirClass(diff);
+  });
+
+  // ---- 较年初 ----
+  const year = Number(String(cur.date).slice(0, 4));
+  let ytdIdx = -1;
+  for (let i = n - 2; i >= 0; i--) {
+    if (Number(FUT[i].date.slice(0, 4)) < year) { ytdIdx = i; break; }
+  }
+  let ytdNote = '';
+  if (ytdIdx < 0) { ytdIdx = 0; ytdNote = '（库内无上一年数据，取序列首条）'; }
+  const ytdRef = FUT[ytdIdx];
+  const ytdRefV = settleOf(ytdRef);
+  const ytdDiff = Math.round(curV - ytdRefV);
+  const ytdPct = ytdRefV ? (ytdDiff / ytdRefV * 100) : 0;
+  setSignedCounter('statYtd', ytdDiff, 0);
+  document.getElementById('statYtdDesc').textContent =
+    fmtDate(ytdRef.date) + ' ' + groupNum(ytdRefV, 0) + ' · ' + signed(ytdPct, 2) + '%' + ytdNote;
+  document.getElementById('statYtdCard').className = 'qstat ' + dirClass(ytdDiff);
+
+  // ---- 较去年同期 ----
+  const yoyDate = (year - 1) + cur.date.slice(4);
+  const yoyIdx = lastIndexOnOrBefore(FUT, yoyDate);
+  const yoyEl = document.getElementById('statYoy');
+  const yoyCard = document.getElementById('statYoyCard');
+  if (yoyIdx < 0) {
+    yoyEl.classList.remove('counter');
+    yoyEl.textContent = '—';
+    document.getElementById('statYoyDesc').textContent = '无去年同期数据';
+    yoyCard.className = 'qstat';
+  } else {
+    const yoyRef = FUT[yoyIdx];
+    const yoyRefV = settleOf(yoyRef);
+    const yoyDiff = Math.round(curV - yoyRefV);
+    const yoyPct = yoyRefV ? (yoyDiff / yoyRefV * 100) : 0;
+    setSignedCounter('statYoy', yoyDiff, 0);
+    document.getElementById('statYoyDesc').textContent =
+      fmtDate(yoyRef.date) + ' ' + groupNum(yoyRefV, 0) + ' · ' + signed(yoyPct, 2) + '%';
+    yoyCard.className = 'qstat ' + dirClass(yoyDiff);
+  }
+}
+
+// ============ 年内位置条 + 连续涨跌（P-4 / P-5）============
+function renderPosition() {
+  const cur = FUT[FUT.length - 1];
+  const year = String(cur.date).slice(0, 4);
+  const thisYear = FUT.filter(r => r.date.slice(0, 4) === year);
+  if (!thisYear.length) return;
+
+  const vals = thisYear.map(settleOf);
+  const lo = Math.min(...vals);
+  const hi = Math.max(...vals);
+  const curV = settleOf(cur);
+  const span = hi - lo;
+  const pos = span > 0 ? (curV - lo) / span * 100 : 50;
+
+  document.getElementById('posTitle').textContent = year + ' 年区间位置';
+  document.getElementById('posLow').textContent = groupNum(lo, 0);
+  document.getElementById('posHigh').textContent = groupNum(hi, 0);
+  document.getElementById('posMid').textContent =
+    '当前 ' + groupNum(curV, 0) + ' · 分位 ' + pos.toFixed(1) + '%';
+  document.getElementById('posFill').style.width = pos.toFixed(1) + '%';
+  document.getElementById('posMark').style.left = pos.toFixed(1) + '%';
+
+  const vd = document.getElementById('posVerdict');
+  let word, cls;
+  if (pos >= 75)      { word = '年内高位（' + pos.toFixed(1) + '% 分位）· 采购可分批，避免一次性满仓'; cls = 'high'; }
+  else if (pos >= 45) { word = '年内中位（' + pos.toFixed(1) + '% 分位）· 按计划采购即可'; cls = 'mid'; }
+  else if (pos >= 20) { word = '年内偏低（' + pos.toFixed(1) + '% 分位）· 可适度提前备货'; cls = 'low'; }
+  else                { word = '年内低位（' + pos.toFixed(1) + '% 分位）· 相对有利的采购窗口'; cls = 'low'; }
+  vd.textContent = word;
+  vd.className = 'pos-verdict ' + cls;
+
+  // ---- 连续涨跌 ----
+  const sign = Math.sign(cur.change || 0);
+  let streak = 1;
+  if (sign !== 0) {
+    for (let i = FUT.length - 2; i >= 1; i--) {
+      if (Math.sign(FUT[i].change || 0) === sign) streak++;
+      else break;
+    }
+  }
+  // 累计口径：末次价 −「本段第一次变动之前」那条的价。
+  // 若拿段内首条自身当基准，会把段内第一次变动整段漏掉，少算一格。
+  const startIdx = FUT.length - 1 - streak;
+  const baseV = startIdx >= 0 ? settleOf(FUT[startIdx]) : settleOf(FUT[0]);
+  const streakSum = Math.round(curV - baseV);
+
+  const streakEl = document.getElementById('msStreak');
+  if (sign === 0) {
+    streakEl.textContent = '持平';
+    streakEl.className = 'v';
+  } else if (streak >= 2) {
+    streakEl.textContent = '连续 ' + streak + ' 日' + (sign > 0 ? '上涨' : '下跌');
+    streakEl.className = 'v ' + (sign > 0 ? 'up' : 'down');
+  } else {
+    streakEl.textContent = '单日' + (sign > 0 ? '上涨' : '下跌');
+    streakEl.className = 'v ' + (sign > 0 ? 'up' : 'down');
+  }
+  const sumEl = document.getElementById('msStreakSum');
+  sumEl.textContent = signed(streakSum, 0);
+  sumEl.className = 'v ' + (streakSum > 0 ? 'up' : streakSum < 0 ? 'down' : '');
+
+  document.getElementById('msAmp').textContent = groupNum(hi - lo, 0);
+
+  const swings = thisYear.filter(r => r.change != null).map(r => Math.abs(r.change));
+  document.getElementById('msMaxSwing').textContent =
+    swings.length ? groupNum(Math.max(...swings), 0) : '—';
+
+  // ---- 持仓量（较约 1 个月前 = 22 个交易日）----
+  const oiRef = FUT[Math.max(0, FUT.length - 22)];
+  const oiEl = document.getElementById('msOi');
+  if (cur.openInterest != null && oiRef.openInterest != null && oiRef !== cur) {
+    const d = cur.openInterest - oiRef.openInterest;
+    const pct = oiRef.openInterest ? d / oiRef.openInterest * 100 : 0;
+    oiEl.textContent = signed(d, 0) + '（' + signed(pct, 1) + '%）';
+    oiEl.className = 'v ' + (d > 0 ? 'up' : d < 0 ? 'down' : '');
+    oiEl.title = '对比 ' + fmtDate(oiRef.date);
+  } else {
+    oiEl.textContent = '—';
+  }
+}
+
+// ============ 影响卡数值填充 ============
+function renderImpactCards(curSettle, lastSpot, lastLme) {
+  const year = String(FUT[FUT.length - 1].date).slice(0, 4);
+  const thisYear = FUT.filter(r => r.date.slice(0, 4) === year);
+  const vals = thisYear.map(settleOf);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const amp = hi - lo;
+  const curV = curSettle;
+  const span = hi - lo;
+  const pos = span > 0 ? (curV - lo) / span * 100 : 50;
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+  // 线缆：YJV 4×50+1×25 每公里理论用铜 ≈ 4×50+25=225mm² × 1000m × 8.9 g/cm³ ≈ 2,002 kg
+  const CABLE_KG_PER_KM = 2002;
+  set('icCableKg', groupNum(CABLE_KG_PER_KM, 0));
+  set('icCablePer1000', groupNum(Math.round(CABLE_KG_PER_KM * 1000 / 1000), 0));
+  set('icCableAmp', groupNum(amp, 0));
+  set('icCableAmpCost', groupNum(Math.round(CABLE_KG_PER_KM * amp / 1000), 0));
+
+  // 复合绝缘横担金具：单套约 3.5 kg
+  const CROSSARM_KG = 3.5;
+  set('icCrossarmKg', CROSSARM_KG);
+  set('icCrossarmSwing', (CROSSARM_KG * amp / 1000).toFixed(1));
+
+  // 变压器：S13-M-400kVA 铜绕组约 300 kg/台
+  const TRAFO_KG = 300;
+  set('icTrafoKg', groupNum(TRAFO_KG, 0));
+  set('icTrafoPer1000', groupNum(Math.round(TRAFO_KG * 1000 / 1000), 0));
+
+  // 采购节奏
+  set('icPosition', pos.toFixed(1) + '%');
+  if (lastSpot && lastSpot.basis != null) {
+    set('icBasisWord', lastSpot.basis > 0 ? '升水' : '贴水');
+    set('icBasisVal', groupNum(Math.abs(lastSpot.basis), 0));
+  } else {
+    set('icBasisWord', '基差');
+    set('icBasisVal', '—');
+  }
+
+  // 波动锚点：只统计本年
+  const changes = thisYear.filter(r => r.change != null).map(r => Math.abs(r.change));
+  set('icAvgSwing', changes.length ? groupNum(Math.round(changes.reduce((a, b) => a + b, 0) / changes.length), 0) : '—');
+  set('icMaxSwing', changes.length ? groupNum(Math.max(...changes), 0) : '—');
+
+  // 内外盘
+  set('icRatio', lastLme && lastLme.ratio != null ? lastLme.ratio : '—');
+  const oneYearAgo = shiftDate(FUT[FUT.length - 1].date, -365);
+  const recent = LME.filter(r => r.date >= oneYearAgo && r.ratio != null).map(r => r.ratio);
+  if (recent.length >= 2) {
+    set('icRatioRange', Math.min(...recent).toFixed(2) + ' ~ ' + Math.max(...recent).toFixed(2));
+  } else {
+    const all = LME.filter(r => r.ratio != null).map(r => r.ratio);
+    set('icRatioRange', all.length >= 2
+      ? Math.min(...all).toFixed(2) + ' ~ ' + Math.max(...all).toFixed(2) + '（全区间）'
+      : '—');
+  }
+}
+
+// ============ 换算器 + 用铜成本（P-6 / P-8）============
+// 用铜量为理论值：截面mm² ÷ 100 × 长度cm × 8.9 g/cm³。
+// 实际含接头、绞合系数、绝缘屏蔽等，会高于理论值（电缆通常再高 3%~8%）。
+const COST_ITEMS = [
+  { name: '铜排 TMY 10×100',     unit: '每米',   kg: 8.9 },
+  { name: '铜芯电缆 YJV 4×50',   unit: '每公里', kg: 2002 },
+  { name: '铜编织带 25mm²',      unit: '每米',   kg: 0.22 },
+  { name: '配电变压器 S13-400kVA', unit: '每台', kg: 300 },
+  { name: '复合绝缘横担 金具',    unit: '每套',   kg: 3.5 },
+  { name: '设备线夹 / T 型线夹',  unit: '每套',   kg: 1.2 }
+];
+
+function initConverter(price) {
+  const input = document.getElementById('convInput');
+  if (!input) return;
+  input.value = Math.round(price);
+  applyConvert();
+  input.addEventListener('input', applyConvert);
+  // 成本表在首次渲染时建一次，之后只更新「用铜成本」列
+  const body = document.getElementById('costBody');
+  body.innerHTML = COST_ITEMS.map(it => `
+    <tr>
+      <td>${it.name}<span class="th-sub">${it.unit}</span></td>
+      <td>${groupNum(it.kg, it.kg < 1 ? 2 : 0)} kg</td>
+      <td class="td-primary" data-kg="${it.kg}">—</td>
+    </tr>`).join('');
+  applyConvert();
+}
+
+function applyConvert() {
+  const input = document.getElementById('convInput');
+  const v = parseFloat(input.value);
+  const ok = !isNaN(v) && v > 0;
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  set('cvKg', ok ? groupNum(v / 1000, 3) : '—');
+  set('cvJin', ok ? groupNum(v / 2000, 4) : '—');
+  set('cvG', ok ? groupNum(v / 1e6, 5) : '—');
+  set('cvWan', ok ? groupNum(v / 1e4, 2) : '—');
+  document.querySelectorAll('#costBody td[data-kg]').forEach(td => {
+    const kg = parseFloat(td.dataset.kg);
+    td.textContent = ok ? '¥' + groupNum(kg * v / 1000, kg * v / 1000 >= 100 ? 0 : 2) : '—';
+  });
+}
+// ============ 历史数据表 ============
+// 现货按日期建索引：表格里把现货均价/基差对齐到期货交易日（当天没有现货报价就留空）。
+// 不「用最近一条填充」—— 那是伪造数据，会让读者以为那天有现货报价。
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  const spotMap = {};
+  SPOT.forEach(s => { spotMap[s.date] = s; });
+
+  const rows = FUT.slice().reverse();               // 最新在前
+  const shown = TABLE_LIMIT > 0 ? rows.slice(0, TABLE_LIMIT) : rows;
+
+  tbody.innerHTML = shown.map(d => {
+    const cls = dirClass(d.change || 0);
+    const typeLabel = d.change > 0 ? '上涨' : d.change < 0 ? '下跌' : '持平';
+    const chgCls = d.change > 0 ? 'up' : d.change < 0 ? 'down' : 'flat';
+    const cumColor = d.change > 0 ? 'var(--up-text)' : d.change < 0 ? 'var(--down-text)' : 'var(--sub)';
+    const s = spotMap[d.date];
+    const spotStr = s ? groupNum(s.price, 0) : '—';
+    const basisStr = (s && s.basis != null)
+      ? '<span style="color:' + (s.basis > 0 ? 'var(--up-text)' : 'var(--down-text)') + '">' + signed(s.basis, 0) + '</span>'
+      : '—';
+    // 换月跳空：连续合约拼接处的伪跳空，必须标出来，否则会被当成真实暴涨暴跌
+    const flag = d.rollover ? '<span class="row-flag" title="单日涨跌幅超过 3%，可能是连续合约换月拼接造成的伪跳空">换月?</span>' : '';
+    return `<tr>
+      <td><strong>${fmtDate(d.date)}</strong><span class="th-sub">${d.date.slice(0, 4)}</span></td>
+      <td><span class="badge ${chgCls}">${typeLabel}</span>${flag}</td>
+      <td class="td-primary">${groupNum(settleOf(d), 0)}</td>
+      <td>${groupNum(d.close, 0)}</td>
+      <td style="font-weight:700;color:${cumColor}">${d.change === null || d.change === undefined ? '—' : signed(d.change, 0)}</td>
+      <td style="color:${cumColor}">${d.changePct === null || d.changePct === undefined ? '—' : signed(d.changePct, 2) + '%'}</td>
+      <td>${groupNum(d.volume, 0)}</td>
+      <td>${groupNum(d.openInterest, 0)}</td>
+      <td>${spotStr}</td>
+      <td>${basisStr}</td>
+    </tr>`;
+  }).join('');
+
+  // 「显示更多」按钮
+  const btn = document.getElementById('tableMore');
+  const total = rows.length;
+  if (TABLE_LIMIT > 0 && total > TABLE_LIMIT) {
+    btn.hidden = false;
+    btn.textContent = '显示更多（已显示 ' + shown.length + ' / ' + groupNum(total, 0) + ' 个交易日）';
+  } else if (TABLE_LIMIT > 0 && total <= TABLE_LIMIT) {
+    btn.hidden = true;
+  } else {
+    btn.hidden = false;
+    btn.textContent = '收起（只显示最近 30 个交易日）';
+  }
+
+  document.getElementById('tableSectionText').textContent =
+    '历史交易日数据 · 最新 ' + groupNum(shown.length, 0) + ' / ' + groupNum(total, 0) + ' 条';
+}
+
+// ============ 数据源状态 ============
+function renderHealth(health) {
+  const grid = document.getElementById('srcGrid');
+  const tag = document.getElementById('healthTag');
+  const entries = Object.entries(health || {});
+  const notesEl = document.getElementById('metaNotes');
+
+  if (!entries.length) {
+    grid.innerHTML = '<div class="src-item"><span class="sdot" style="background:var(--sub)"></span>' +
+      '<div><div class="sn">本地/回退数据</div><div class="sd">当前展示的是内嵌回退数据，未读取到数据源健康报告</div></div></div>';
+    tag.textContent = '回退模式';
+    return;
+  }
+
+  const bad = entries.filter(([, v]) => !v.ok);
+  tag.textContent = bad.length === 0 ? '全部正常' : (bad.length + ' / ' + entries.length + ' 异常');
+  tag.style.color = bad.length ? 'var(--up-text)' : '';
+  tag.style.borderColor = bad.length ? 'var(--up-text)' : '';
+
+  grid.innerHTML = entries.map(([name, v]) => {
+    const fails = v.consecutiveFailures || 0;
+    return `<div class="src-item${v.ok ? '' : ' bad'}">
+      <span class="sdot"></span>
+      <div>
+        <div class="sn">${name}${v.ok ? '' : '（异常）'}</div>
+        <div class="sd">${v.detail || '—'}</div>
+        ${fails >= 2 ? '<div class="sf">已连续失败 ' + fails + ' 天</div>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // meta 里的校验提示：基差、换月跳空等，原样透出，不藏
+  const notes = (META.notes || []).concat(META.warnings || []);
+  if (notes.length) {
+    notesEl.innerHTML = '<strong>校验提示：</strong>' + notes.join('；') +
+      '。<br>序列口径：沪铜连续结算价（上海期货交易所），历史自 ' + (META.historySince || '—') +
+      ' 起；现货为生意社 1# 电解铜多供应商均价，覆盖 ' + (META.spotDays || 0) +
+      ' 个交易日；LME 序列自 ' + (META.lmeSince || '—') + ' 起。';
+  } else {
+    notesEl.innerHTML = '序列口径：沪铜连续结算价（上海期货交易所），历史自 ' + (META.historySince || '—') +
+      ' 起；现货为生意社 1# 电解铜多供应商均价，覆盖 ' + (META.spotDays || 0) +
+      ' 个交易日；LME 序列自 ' + (META.lmeSince || '—') + ' 起。';
+  }
+}
+
+// ================================================================
+// 图表主题（色值全部来自 CSS 令牌，JS 不再写死任何颜色）
+// ================================================================
+let _chartTheme = null;
+let _mainChartInst = null;
+let _ratioChartInst = null;
+let _basisChartInst = null;
+
+function cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return (v && v.trim()) || fallback;
+}
+function getChartTheme() {
+  if (_chartTheme) return _chartTheme;
+  _chartTheme = {
+    axisLabel: cssVar('--chart-axis-label', '#78716c'),
+    axisLine: cssVar('--chart-axis-line', '#e8e2da'),
+    splitLine: cssVar('--chart-split-line', '#f4f0eb'),
+    dataZoomBg: cssVar('--chart-zoom-bg', '#f0ebe5'),
+    dataZoomFill: cssVar('--chart-zoom-fill', 'rgba(194,112,61,.18)'),
+    areaFrom: cssVar('--chart-area-from', 'rgba(194,112,61,.16)'),
+    areaTo: cssVar('--chart-area-to', 'rgba(194,112,61,0)'),
+    tipBg: cssVar('--chart-tooltip-bg', 'rgba(28,22,16,.95)'),
+    tipBorder: cssVar('--chart-tooltip-border', 'transparent'),
+    tipFg: cssVar('--chart-tooltip-fg', '#fff'),
+    handle: cssVar('--ser-futures', '#c2703d'),
+    iconColor: cssVar('--chart-icon', '#78716c'),
+    futures: cssVar('--ser-futures', '#c2703d'),
+    spot: cssVar('--ser-spot', '#0d9488'),
+    lme: cssVar('--ser-lme', '#4f6bed'),
+    ratio: cssVar('--ser-ratio', '#8b5cf6'),
+    basis: cssVar('--ser-basis', '#d97706'),
+    vol: cssVar('--ser-vol', '#cbd5e1'),
+    up: cssVar('--red', '#ef4444'),
+    down: cssVar('--green', '#10b981'),
+    sub: cssVar('--sub', '#78716c'),
+  };
+  return _chartTheme;
+}
+function echartsReady(dom, name) {
+  if (typeof echarts === 'undefined') {
+    dom.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;' +
+      'color:var(--sub);font-size:13px;text-align:center;padding:20px;line-height:1.8">' +
+      '图表库加载失败（CDN 不可达）<br>数据与表格仍可正常查看</div>';
+    console.warn('[CPT] echarts 未加载，' + (name || '') + ' 图表跳过渲染');
+    return false;
+  }
+  return true;
+}
+// 主题切换后重绘所有图表（替代整页重载）
+function rerenderCharts() {
+  if (!_chartData) return;
+  _chartTheme = null;
+  // 必须同步重绘：getComputedStyle 本身会强制样式重算，不需要等 rAF；
+  // 而 rAF 在后台标签页不触发，挂上去会导致切主题后图表颜色不更新
+  renderMainChart();
+  renderRatioChart();
+  renderBasisChart();
+}
+
+// ============ 主走势图（P-3）============
+// 单图双 grid：上图 = 收盘/结算/现货三条线，下图 = 成交量柱。
+// 用 dataZoom 控制可视区间而非切数据，用户还能继续拖拽缩放。
+const RANGE_DAYS = { '3m': 92, '1y': 366, '5y': 1830, 'all': 0 };
+const RANGE_LABEL = { '3m': '近 3 月', '1y': '近 1 年', '5y': '近 5 年', 'all': '全部历史' };
+
+function renderMainChart() {
+  const dom = document.getElementById('mainChart');
+  if (!echartsReady(dom, '主走势')) return;
+  if (_mainChartInst) _mainChartInst.dispose();
+  const t = getChartTheme();
+  const chart = echarts.init(dom, null);
+  _mainChartInst = chart;
+
+  const labels = FUT.map(d => d.date);
+  const closes = FUT.map(d => d.close);
+  const settles = FUT.map(d => settleOf(d));
+  const vols = FUT.map(d => d.volume);
+
+  // 现货按日期映射到期货轴上；没有报价的日期给 null，
+  // 并显式 connectNulls:false —— 否则 ECharts 会把断裂处连起来，凭空造出「一直有现货价」的假象。
+  const spotMap = {};
+  SPOT.forEach(s => { spotMap[s.date] = s.price; });
+  const spotAligned = labels.map(d => (spotMap[d] !== undefined ? spotMap[d] : null));
+
+  // 年内最高/最低参考线（用本年数据，与「年内位置」卡片口径一致）
+  const year = String(FUT[FUT.length - 1].date).slice(0, 4);
+  const thisYear = FUT.filter(r => r.date.slice(0, 4) === year);
+  const yVals = thisYear.map(settleOf);
+  const yHi = Math.max(...yVals), yLo = Math.min(...yVals);
+
+  const markLines = [
+    { name: '年内最高 ' + groupNum(yHi, 0), yAxis: yHi,
+      lineStyle: { color: t.up, type: 'dashed', width: 1.2, opacity: .75 },
+      label: { show: true, position: 'insideEndTop', formatter: '年内最高 {c}',
+               color: t.up, fontSize: 10, fontWeight: 'bold' } },
+    { name: '年内最低 ' + groupNum(yLo, 0), yAxis: yLo,
+      lineStyle: { color: t.down, type: 'dashed', width: 1.2, opacity: .75 },
+      label: { show: true, position: 'insideEndBottom', formatter: '年内最低 {c}',
+               color: t.down, fontSize: 10, fontWeight: 'bold' } }
+  ];
+
+  // 换月跳空点：打在图钉上，让读者一眼看到「这里有伪跳空」
+  const rollPoints = FUT.filter(r => r.rollover).slice(-12).map(r => ({
+    name: '换月跳空', coord: [r.date, r.close], value: r.date,
+    symbol: 'pin', symbolSize: 30,
+    itemStyle: { color: cssVar('--amber', '#f59e0b') },
+    label: { show: true, formatter: '跳', color: '#fff', fontSize: 9, fontWeight: 'bold' }
+  }));
+
+  const rangeStart = computeRangeStart();
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    animationDuration: 600,
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: t.tipBg,
+      borderColor: t.tipBorder,
+      textStyle: { color: t.tipFg, fontSize: 12 },
+      formatter: function (params) {
+        let tip = '<strong>' + fmtFull(params[0].axisValue) + '</strong><br/>';
+        params.forEach(function (p) {
+          if (p.value === null || p.value === undefined) return;
+          tip += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' +
+            p.color + ';margin-right:6px;"></span>';
+          tip += p.seriesName + ': <b>' + groupNum(p.value, 0) + '</b><br/>';
+        });
+        // 从原始数据补出「涨跌」，避免读者自己去减
+        const row = FUT.find(x => x.date === params[0].axisValue);
+        if (row && row.change !== null && row.change !== undefined) {
+          const clr = row.change > 0 ? t.up : row.change < 0 ? t.down : t.sub;
+          tip += '<span style="color:' + clr + '">较前日 ' + signed(row.change, 0) +
+            '（' + signed(row.changePct, 2) + '%）</span>';
+        }
+        return tip;
+      }
+    },
+    legend: {
+      top: 0, left: 'center',
+      textStyle: { fontSize: 12, color: t.axisLabel },
+      itemWidth: 20, itemHeight: 3,
+      data: ['沪铜收盘', '沪铜结算', '现货 1# 电解铜', '成交量']
+    },
+    grid: [
+      { left: 68, right: 44, top: 46, height: '58%' },
+      { left: 68, right: 44, bottom: 62, height: '13%' }
+    ],
+    toolbox: {
+      right: 10, top: 0,
+      iconStyle: { borderColor: t.iconColor },
+      feature: { saveAsImage: { title: '保存图片', name: '沪铜价格走势', pixelRatio: 2 } }
+    },
+    axisPointer: { link: [{ xAxisIndex: 'all' }] },
+    dataZoom: [
+      { type: 'slider', xAxisIndex: [0, 1], bottom: 10, height: 14,
+        borderColor: 'transparent', backgroundColor: t.dataZoomBg,
+        fillerColor: t.dataZoomFill, handleStyle: { color: t.handle },
+        textStyle: { color: t.axisLabel },
+        startValue: rangeStart, endValue: labels[labels.length - 1] },
+      { type: 'inside', xAxisIndex: [0, 1] }
+    ],
+    xAxis: [
+      { type: 'category', data: labels, boundaryGap: false, gridIndex: 0,
+        axisLine: { lineStyle: { color: t.axisLine } },
+        axisLabel: { color: t.axisLabel, fontSize: 11, hideOverlap: true },
+        axisTick: { show: false } },
+      { type: 'category', data: labels, boundaryGap: false, gridIndex: 1,
+        axisLine: { lineStyle: { color: t.axisLine } },
+        axisLabel: { show: false }, axisTick: { show: false } }
+    ],
+    yAxis: [
+      { type: 'value', gridIndex: 0, scale: true,
+        axisLabel: { formatter: v => groupNum(v, 0), color: t.axisLabel, fontSize: 11 },
+        splitLine: { lineStyle: { color: t.splitLine } } },
+      { type: 'value', gridIndex: 1, splitNumber: 2,
+        axisLabel: { formatter: v => (v >= 10000 ? (v / 10000) + '万' : v), color: t.axisLabel, fontSize: 10 },
+        splitLine: { show: false } }
+    ],
+    series: [
+      // 主指标：收盘价，线最粗 + 面积填充 + 图例排首位
+      {
+        name: '沪铜收盘', type: 'line', data: closes,
+        xAxisIndex: 0, yAxisIndex: 0,
+        smooth: 0.12, symbol: 'circle', symbolSize: 5, showSymbol: false,
+        lineStyle: { color: t.futures, width: 2.6 },
+        itemStyle: { color: t.futures },
+        emphasis: { focus: 'series' },
+        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1,
+          [{ offset: 0, color: t.areaFrom }, { offset: 1, color: t.areaTo }]) },
+        markLine: { symbol: 'none', silent: true, data: markLines },
+        markPoint: { data: rollPoints, animation: true }
+      },
+      // 结算价：正式口径，虚线表达「这是它与收盘价的差别」
+      {
+        name: '沪铜结算', type: 'line', data: settles,
+        xAxisIndex: 0, yAxisIndex: 0,
+        smooth: 0.12, symbol: 'none', showSymbol: false,
+        lineStyle: { color: t.futures, width: 1.3, type: 'dashed', opacity: .75 },
+        itemStyle: { color: t.futures }
+      },
+      // 现货：只在自建区间存在，靠 connectNulls:false 诚实断线
+      {
+        name: '现货 1# 电解铜', type: 'line', data: spotAligned,
+        xAxisIndex: 0, yAxisIndex: 0,
+        connectNulls: false, symbol: 'circle', symbolSize: 6,
+        lineStyle: { color: t.spot, width: 2, type: 'dotted' },
+        itemStyle: { color: t.spot }
+      },
+      // 成交量（副图）
+      {
+        name: '成交量', type: 'bar', data: vols,
+        xAxisIndex: 1, yAxisIndex: 1,
+        itemStyle: { color: t.vol, borderRadius: [3, 3, 0, 0] },
+        barMaxWidth: 10
+      }
+    ]
+  });
+
+  bindResize(chart, '_mainResize');
+  updateRangeHint();
+}
+
+// 按当前周期算 dataZoom 起点（用日期而非百分比：交易日不连续，百分比会算歪）
+function computeRangeStart() {
+  const labels0 = FUT[0].date;
+  const labelsN = FUT[FUT.length - 1].date;
+  const days = RANGE_DAYS[CUR_RANGE];
+  if (!days) return labels0;
+  const target = shiftDate(labelsN, -days);
+  if (target <= labels0) return labels0;
+  // ⚠️ 退出来的目标日多半不是交易日（周末/节假日）。ECharts 的 dataZoom.startValue
+  // 对 category 轴是「精确值匹配」，匹配不上会静默回退成 start:0/end:100（=全量），
+  // 图表看着毫无反应，而文字提示还是对的 —— 项目里踩过这个坑。
+  // 所以起点必须对齐到「首个 >= 目标日」的真实交易日。
+  const k = lastIndexOnOrBefore(FUT, target);
+  if (k < 0) return labels0;
+  if (FUT[k].date === target) return target;
+  const i = k + 1;
+  return i < FUT.length ? FUT[i].date : labelsN;
+}
+
+function updateRangeHint() {
+  const days = RANGE_DAYS[CUR_RANGE];
+  const start = computeRangeStart();
+  const cnt = FUT.filter(r => r.date >= start).length;
+  document.getElementById('rangeHint').textContent =
+    RANGE_LABEL[CUR_RANGE] + ' · ' + groupNum(cnt, 0) + ' 个交易日（' +
+    (days ? start : FUT[0].date) + ' 起）';
+}
+
+function bindRangeButtons() {
+  document.querySelectorAll('#rangeGroup .rg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const r = btn.dataset.range;
+      if (r === CUR_RANGE) return;
+      CUR_RANGE = r;
+      document.querySelectorAll('#rangeGroup .rg-btn').forEach(b => {
+        b.setAttribute('aria-pressed', b.dataset.range === r ? 'true' : 'false');
+      });
+      // 只调 dataZoom，不重建图表 —— 重建会丢掉用户的缩放状态，且闪烁
+      if (_mainChartInst) {
+        const start = computeRangeStart();
+        _mainChartInst.dispatchAction({
+          type: 'dataZoom',
+          startValue: start,
+          endValue: FUT[FUT.length - 1].date
+        });
+      }
+      updateRangeHint();
+    });
+  });
+}
+
+// ============ 沪伦比走势（P-7）============
+function renderRatioChart() {
+  const dom = document.getElementById('ratioChart');
+  if (!echartsReady(dom, '沪伦比')) return;
+  if (_ratioChartInst) _ratioChartInst.dispose();
+  const t = getChartTheme();
+  const chart = echarts.init(dom, null);
+  _ratioChartInst = chart;
+
+  const rows = LME.filter(r => r.ratio != null);
+  const descEl = document.getElementById('ratioDesc');
+
+  if (rows.length < 2) {
+    chart.dispose(); _ratioChartInst = null;
+    dom.innerHTML = rows.length === 1
+      ? '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--sub);' +
+        'font-size:13px;text-align:center;padding:20px;line-height:1.9">' +
+        '沪伦比序列自建中<br>当前仅 1 个交易日（' + rows[0].ratio + '）<br>' +
+        '<span style="font-size:12px;opacity:.8">需累积 2 个以上交易日才能画走势</span></div>'
+      : '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--sub);' +
+        'font-size:13px;text-align:center;padding:20px">沪伦比数据不可用</div>';
+    descEl.textContent = 'LME 铜价或期货结算价缺失，无法计算比值';
+    return;
+  }
+
+  const labels = rows.map(r => r.date);
+  const vals = rows.map(r => r.ratio);
+  const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const recentVals = vals.slice(-92);
+  const rLo = Math.min(...recentVals), rHi = Math.max(...recentVals);
+
+  descEl.innerHTML = '当前 <b>' + vals[vals.length - 1].toFixed(2) + '</b>' +
+    ' · 近 3 月区间 ' + rLo.toFixed(2) + ' ~ ' + rHi.toFixed(2) +
+    ' · 全序列均值 ' + mean.toFixed(2) + '（' + groupNum(rows.length, 0) + ' 条，自 ' +
+    rows[0].date + '）';
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: t.tipBg, borderColor: t.tipBorder,
+      textStyle: { color: t.tipFg, fontSize: 12 },
+      formatter: p => '<strong>' + fmtFull(p[0].axisValue) + '</strong><br/>沪伦比: <b>' +
+        Number(p[0].value).toFixed(2) + '</b>'
+    },
+    grid: { left: 46, right: 16, top: 22, bottom: 46 },
+    dataZoom: [
+      { type: 'slider', bottom: 6, height: 12, borderColor: 'transparent',
+        backgroundColor: t.dataZoomBg, fillerColor: t.dataZoomFill,
+        handleStyle: { color: t.handle }, textStyle: { color: t.axisLabel } },
+      { type: 'inside' }
+    ],
+    xAxis: {
+      type: 'category', data: labels, boundaryGap: false,
+      axisLine: { lineStyle: { color: t.axisLine } },
+      axisLabel: { color: t.axisLabel, fontSize: 10, hideOverlap: true },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value', scale: true,
+      axisLabel: { formatter: v => v.toFixed(2), color: t.axisLabel, fontSize: 10 },
+      splitLine: { lineStyle: { color: t.splitLine } }
+    },
+    series: [{
+      name: '沪伦比', type: 'line', data: vals,
+      smooth: 0.15, symbol: 'none', showSymbol: false,
+      lineStyle: { color: t.ratio, width: 2 },
+      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1,
+        [{ offset: 0, color: 'rgba(139,92,246,.22)' }, { offset: 1, color: 'rgba(139,92,246,0)' }]) },
+      markLine: {
+        symbol: 'none', silent: true,
+        data: [{ name: '全序列均值', yAxis: mean,
+                 lineStyle: { color: t.sub, type: 'dashed', width: 1, opacity: .7 },
+                 label: { show: true, formatter: '均值 ' + mean.toFixed(2),
+                          color: t.sub, fontSize: 10 } }]
+      }
+    }]
+  });
+  bindResize(chart, '_ratioResize');
+}
+
+// ============ 现货基差走势（P-7 右图）============
+function renderBasisChart() {
+  const dom = document.getElementById('basisChart');
+  if (!echartsReady(dom, '基差')) return;
+  if (_basisChartInst) _basisChartInst.dispose();
+  const t = getChartTheme();
+  const chart = echarts.init(dom, null);
+  _basisChartInst = chart;
+
+  const rows = SPOT.filter(r => r.basis != null);
+  const descEl = document.getElementById('basisDesc');
+
+  if (!rows.length) {
+    chart.dispose(); _basisChartInst = null;
+    dom.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;' +
+      'color:var(--sub);font-size:13px;text-align:center;padding:20px">暂无基差数据</div>';
+    descEl.textContent = '需要同时有现货报价与期货结算价才能计算基差';
+    return;
+  }
+
+  const labels = rows.map(r => r.date);
+  const vals = rows.map(r => r.basis);
+  const lastB = vals[vals.length - 1];
+  descEl.innerHTML = '当前 <b style="color:' + (lastB > 0 ? 'var(--up-text)' : 'var(--down-text)') + '">' +
+    signed(lastB, 0) + '</b> 元/吨（' + (lastB > 0 ? '现货升水' : '现货贴水') + '）· 覆盖 ' +
+    rows.length + ' 个交易日，自 ' + rows[0].date;
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      backgroundColor: t.tipBg, borderColor: t.tipBorder,
+      textStyle: { color: t.tipFg, fontSize: 12 },
+      formatter: function (p) {
+        const v = p[0].value;
+        return '<strong>' + fmtFull(p[0].axisValue) + '</strong><br/>基差: <b>' +
+          (v > 0 ? '+' : '') + groupNum(v, 0) + ' 元/吨</b>（' + (v > 0 ? '升水' : '贴水') + '）';
+      }
+    },
+    grid: { left: 62, right: 16, top: 22, bottom: 30 },
+    xAxis: {
+      type: 'category', data: labels,
+      axisLine: { lineStyle: { color: t.axisLine } },
+      axisLabel: { color: t.axisLabel, fontSize: 10, hideOverlap: true },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value', scale: true,
+      axisLabel: { formatter: v => groupNum(v, 0), color: t.axisLabel, fontSize: 10 },
+      splitLine: { lineStyle: { color: t.splitLine } }
+    },
+    series: [{
+      name: '基差', type: 'bar',
+      data: vals.map(v => ({
+        value: v,
+        itemStyle: {
+          // 升水用红、贴水用绿 —— 与「涨红跌绿」同一套语义，避免读者要重新学一遍配色
+          color: v > 0 ? t.up : t.down,
+          borderRadius: v >= 0 ? [5, 5, 0, 0] : [0, 0, 5, 5]
+        }
+      })),
+      barMaxWidth: 34,
+      label: {
+        show: vals.length <= 15, position: 'top', fontSize: 10, color: t.axisLabel,
+        formatter: p => (p.value > 0 ? '+' : '') + groupNum(p.value, 0)
+      }
+    }]
+  });
+  bindResize(chart, '_basisResize');
+}
+
+// 统一 resize 绑定：按 key 只绑一次，避免每次重绘都往 window 上挂新的监听
+function bindResize(chart, key) {
+  if (!window.__cptResize) window.__cptResize = {};
+  if (window.__cptResize[key]) return;
+  window.__cptResize[key] = true;
+  let timer;
+  window.addEventListener('resize', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (chart && !chart.isDisposed()) chart.resize();
+    }, 150);
+  });
+}
+
+// ================================================================
+// 主题管理：auto（跟随系统） / light / dark
+// 分段控件三选一 —— 点哪个就应用哪个，不做循环切换
+// 选择持久化到 localStorage；URL 参数 ?theme= 可临时覆盖（不落盘），便于分享与自动化验证
+// ================================================================
+const THEME_KEY = 'cpt-theme';
+const THEME_MODES = ['auto', 'light', 'dark'];
+const THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
+
+function readThemeMode() {
+  let m = null;
+  try { m = new URLSearchParams(location.search).get('theme'); } catch (e) {}
+  if (!m) { try { m = localStorage.getItem(THEME_KEY); } catch (e) {} }
+  return THEME_MODES.indexOf(m) >= 0 ? m : 'auto';
+}
+function systemDark() { return window.matchMedia('(prefers-color-scheme: dark)').matches; }
+function isDarkActive() { return _themeMode === 'dark' || (_themeMode === 'auto' && systemDark()); }
+
+let _themeMode = readThemeMode();
+
+function syncThemeSwitch(mode) {
+  document.querySelectorAll('#themeSwitch .ts-btn').forEach(b => {
+    const on = b.dataset.themeMode === mode;
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.setAttribute('aria-label', THEME_LABEL[b.dataset.themeMode] + (on ? '（当前）' : ''));
+  });
+}
+function applyTheme(mode, persist) {
+  _themeMode = mode;
+  const root = document.documentElement;
+  if (mode === 'auto') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', mode);
+  if (persist) { try { localStorage.setItem(THEME_KEY, mode); } catch (e) {} }
+  syncThemeSwitch(mode);
+  rerenderCharts();
+}
+document.querySelectorAll('#themeSwitch .ts-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.themeMode;
+    if (mode !== _themeMode) applyTheme(mode, true);
+  });
+});
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  // auto 模式下系统主题变化：模式没变（仍是 auto），只需重绘图表
+  if (_themeMode === 'auto') rerenderCharts();
+});
+applyTheme(_themeMode, false);
+
+// ============ 数据加载失败的提示与重试 ============
+function showDataWarning() {
+  const textEl = document.getElementById('currentPriceText');
+  if (textEl) textEl.textContent = '数据加载失败，已使用内嵌回退数据';
+
+  const titleEl = document.getElementById('currentPriceTitle');
+  if (titleEl && !document.getElementById('retryBtn')) {
+    titleEl.insertAdjacentHTML('beforeend',
+      '<button class="btn-retry" id="retryBtn" type="button">' +
+      '<svg class="ic" aria-hidden="true"><use href="#i-refresh" /></svg><span>点击重试</span></button>');
+  }
+  const btn = document.getElementById('retryBtn');
+  if (!btn) return;
+  const setLabel = (text) => {
+    const s = btn.querySelector('span');
+    if (s) s.textContent = text;
+  };
+  btn.addEventListener('click', async function () {
+    this.disabled = true;
+    setLabel('重试中…');
+    try {
+      const resp = await fetch('./data.json', { cache: 'reload' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      dataLoadFailed = false;
+      // 重新走一遍初始化，而不是整页重载
+      btn.remove();
+      retryBtnAdded = false;
+      init();
+    } catch (e) {
+      setLabel('仍然失败，稍后再试');
+      setTimeout(() => { setLabel('点击重试'); btn.disabled = false; }, 3000);
+    }
+  });
+  retryBtnAdded = true;
+}
+
+// 「显示更多 / 收起」切换
+document.getElementById('tableMore').addEventListener('click', function () {
+  TABLE_LIMIT = TABLE_LIMIT > 0 ? 0 : 30;
+  renderTable();
+  if (TABLE_LIMIT === 0) {
+    // 展开后按钮变成「收起」，把它留在原处即可（表格很长，不强制滚回顶部）
+  }
+});
+
+// ============ 启动 ============
+// 等 DOMContentLoaded 确保 defer 脚本（ECharts CDN）已就绪
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
+// ============ PWA Service Worker ============
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

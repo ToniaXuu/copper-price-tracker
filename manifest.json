@@ -1,0 +1,13 @@
+{
+  "name": "沪铜价格趋势 · 电力设备采购锚点",
+  "short_name": "铜价追踪",
+  "description": "追踪沪铜连续合约结算价、现货1#电解铜与LME铜价，含基差、沪伦比与用铜成本换算",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#12100f",
+  "theme_color": "#c2703d",
+  "icons": [
+    { "src": "icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
