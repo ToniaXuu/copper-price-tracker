@@ -280,6 +280,59 @@ SNAPSHOT = r"""(() => {
 
     tableRows: document.querySelectorAll('#tableBody tr').length,
 
+    /* 布局间距实测：影响卡片区 → 历史数据标题、标题 → 表格 之间的真实像素间距。
+       getBoundingClientRect 取的是视口坐标，两元素同时可见时差值即实际间距。 */
+    gapImpactToHistory: (function(){
+      try {
+        const grid = document.querySelector('.impact-grid');
+        const hist = g('sec-history');
+        if (!grid || !hist) return null;
+        // 卡片区 → 历史卡：取 .impact-grid 的 margin-bottom 与历史卡顶部之间，
+        // 由于两者是兄弟块级元素，margin 不塌陷（grid 是 grid 容器），
+        // 净空 = hist.top − (grid.top + grid.height)。
+        const a = grid.getBoundingClientRect();
+        const b = hist.getBoundingClientRect();
+        return Math.round(b.top - (a.top + a.height));
+      } catch(e) { return 'ERR:' + e.message; }
+    })(),
+    gapHistoryTitleToTable: (function(){
+      try {
+        const hist = g('sec-history');
+        if (!hist) return null;
+        const t = hist.querySelector('.section-title');
+        const t2 = hist.querySelector('.tbl-wrap');
+        if (!t || !t2) return null;
+        // ⚠️ 不能用 rect.bottom 相减：外边距(margin-bottom)不在 rect 里，会算出负数。
+        // 正确算法 = 下一元素 top - 上一元素 bottom - 元素自身 margin-bottom 之外的间距，
+        // 这里直接取「两元素 box 之间的净空」= 下一 top − (上一 top + 上一 height)。
+        const a = t.getBoundingClientRect();
+        const b = t2.getBoundingClientRect();
+        return Math.round(b.top - (a.top + a.height));
+      } catch(e) { return 'ERR:' + e.message; }
+    })(),
+    gapImpactTitleToGrid: (function(){
+      try {
+        const t = g('sec-impact');
+        const grid = document.querySelector('.impact-grid');
+        if (!t || !grid) return null;
+        // 同上：标题的 margin-bottom 是 22px，不在 rect 里，故用 top+height 算净空。
+        const a = t.getBoundingClientRect();
+        const b = grid.getBoundingClientRect();
+        return Math.round(b.top - (a.top + a.height));
+      } catch(e) { return 'ERR:' + e.message; }
+    })(),
+    impactGridMB: (function(){
+      const e = document.querySelector('.impact-grid');
+      return e ? getComputedStyle(e).marginBottom : null;
+    })(),
+    impactRowBottoms: (function(){
+      /* 三层卡片各自底边 y，用来判断同行卡片底边是否参差 */
+      try {
+        const cards = Array.from(document.querySelectorAll('.impact-card'));
+        return cards.map(c => Math.round(c.getBoundingClientRect().bottom));
+      } catch(e) { return []; }
+    })(),
+
     srcCards: document.querySelectorAll('#srcGrid > *').length,
     healthTag: txt('healthTag'),
 
@@ -553,6 +606,82 @@ def main() -> int:
             no("年内位置结论为空")
         ok(f"连续涨跌：{snap['msStreak']!r}；年振幅：{snap['msAmp']!r}；"
            f"最大单日：{snap['msMaxSwing']!r}；持仓：{snap['msOi']!r}")
+
+        # ---- F2 区块间距（影响卡片区 ↔ 历史数据标题 ↔ 表格）----
+        # ⚠️ 两个测量陷阱，都踩过：
+        #   ① getBoundingClientRect() 不含 margin → 必须用「上top+上height」作基准，
+        #      直接用 rect.bottom 相减会把 22px 的 margin-bottom 算成负数。
+        #   ② .reveal 入场动画是 opacity+translateY(36px)，未归位时 rect 带着 36px 偏移，
+        #      量出的间距会正好偏 -36+22 = -14px。测量前必须强制所有 reveal 归位。
+        cdp.js("""(() => {
+          document.querySelectorAll('.reveal').forEach(e => {
+            e.classList.add('visible');
+            e.style.opacity = '1';
+            e.style.transform = 'none';
+            e.style.transition = 'none';
+          });
+          return 'ok';
+        })()""")
+        time.sleep(0.45)
+        gap = json.loads(cdp.js(r"""JSON.stringify({
+          toHistory: (function(){
+            const a = document.querySelector('.impact-grid').getBoundingClientRect();
+            const b = document.getElementById('sec-history').getBoundingClientRect();
+            return Math.round(b.top - (a.top + a.height));
+          })(),
+          titleToGrid: (function(){
+            const a = document.getElementById('sec-impact').getBoundingClientRect();
+            const b = document.querySelector('.impact-grid').getBoundingClientRect();
+            return Math.round(b.top - (a.top + a.height));
+          })(),
+          titleToTable: (function(){
+            const c = document.getElementById('sec-history');
+            const a = c.querySelector('.section-title').getBoundingClientRect();
+            const b = c.querySelector('.tbl-wrap').getBoundingClientRect();
+            return Math.round(b.top - (a.top + a.height));
+          })()
+        })"""))
+        snap.update({
+            "gapImpactToHistory": gap["toHistory"],
+            "gapImpactTitleToGrid": gap["titleToGrid"],
+            "gapHistoryTitleToTable": gap["titleToTable"],
+        })
+
+        print("\n-- F2. 区块间距实测（reveal 已归位） --")
+        g1 = snap.get("gapImpactToHistory")
+        if isinstance(g1, int):
+            # 影响卡片 → 历史数据卡：净空应显著大于 0（两区块不能贴死）
+            if g1 >= 28:
+                ok(f"影响卡片区 → 历史数据卡 净空 {g1}px（不拥挤）")
+            elif g1 >= 16:
+                wn(f"影响卡片区 → 历史数据卡 净空 {g1}px（偏挤，建议 >=28px）")
+            else:
+                no(f"影响卡片区 → 历史数据卡 净空仅 {g1}px —— 两区块贴死")
+        else:
+            no(f"间距测量失败：gapImpactToHistory={g1!r}")
+        if snap.get("impactGridMB") in ("28px", "28.0px"):
+            ok(f".impact-grid margin-bottom = {snap['impactGridMB']}")
+        else:
+            no(f".impact-grid margin-bottom = {snap['impactGridMB']!r}（预期 28px）")
+        g3 = snap.get("gapImpactTitleToGrid")
+        if isinstance(g3, int) and 18 <= g3 <= 26:
+            ok(f"影响区标题 → 卡片栅格 净空 {g3}px（= .section-title margin-bottom 22px）")
+        else:
+            wn(f"影响区标题 → 卡片栅格 净空 {g3!r}px（预期 ~22px）")
+        g2 = snap.get("gapHistoryTitleToTable")
+        if isinstance(g2, int) and 18 <= g2 <= 32:
+            ok(f"历史数据标题 → 表格 净空 {g2}px")
+        else:
+            wn(f"历史数据标题 → 表格 净空 {g2!r}px（预期 ~22px）")
+        rb = snap.get("impactRowBottoms") or []
+        if len(rb) >= 6:
+            uniq = sorted(set(rb))
+            ok(f"影响卡片底边 y 值 {uniq}（{len(rb)} 张卡 / {len(uniq)} 种底边）")
+            if len(uniq) > 2:
+                wn(f"同层卡片底边参差：{uniq} —— 文字长度差异所致，非缺陷")
+        else:
+            wn(f"影响卡片数仅 {len(rb)}，未能评估底边参差")
+
         ok(f"SW 状态：{snap['sw']}")
 
         # ---------------- H 交互与边界分支 ----------------
@@ -713,6 +842,32 @@ def main() -> int:
         # 独立页面 + 独立数据源（releases.json）。核心口径是「同一天多版本合并成一个节点」
         # 与「节点内按时刻倒序」—— 这两条错了页面就白做，所以重点验它们。
         print("\n== I. 版本发布记录页（releases.html） ==")
+
+        # 期望值从 releases.json 动态推导，不硬编码 —— 否则每次发版改时间，
+        # 探针都会拿旧时间假失败一次（本坑已踩过：v1.1.0 由 11:45 修正为 11:15）。
+        rel_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "releases.json")
+        with open(rel_path, encoding="utf-8") as fh:
+            rel_data = json.load(fh)
+        rel_list = rel_data.get("releases", [])
+        # 时刻倒序（HH:MM 字符串，locateCompare numeric 语义与页面一致）
+        want_times = sorted(
+            [("%s" % (e.get("time") or "--:--"))[:5] for e in rel_list],
+            key=lambda s: s, reverse=True,
+        )
+        # 按 (date desc, time desc) 展开后的版本号顺序。
+        # ⚠️ releases.json 存裸号（"1.1.0"），页面渲染时加 v 前缀（"'v1.1.0'"）——
+        # 比对前必须补前缀，否则必然假失败（本坑已踩）。
+        def _v(x):
+            s = str(x or "")
+            return s if s.startswith("v") else ("v" + s)
+        want_vers = [_v(e.get("version")) for e in sorted(
+            rel_list, key=lambda e: (e.get("date", ""), ("%s" % (e.get("time") or ""))[:5]), reverse=True)]
+        want_days = len({e.get("date") for e in rel_list})
+        want_newest_ver = want_vers[0] if want_vers else None
+        want_newest_time = want_times[0] if want_times else None
+        print(f"  期望（源自 releases.json）：{want_days} 天 / {len(rel_list)} 条 · "
+              f"时刻 {want_times} · 版本 {want_vers}")
+
         cdp.call("Page.navigate", {"url": base + "releases.html"})
         rendered = False
         repl_deadline = time.time() + 30
@@ -748,34 +903,35 @@ def main() -> int:
         print(f"  节点 {r['days']} 个 / 条目 {r['entries']} 个 · 节点徽标 {r['counts']}")
         print(f"  时刻顺序 {r['times']} · 版本顺序 {r['vers']}")
 
-        # I1 同日合并：releases.json 里 3 条同日期版本 → 只该有 1 个日期节点
-        if r["days"] == 1 and r["entries"] == 3:
-            ok("同一天的 3 个版本合并为 1 个日期节点（合并生效）")
+        # I1 同日合并：releases.json 里同日期多条版本 → 只该有 want_days 个日期节点
+        if r["days"] == want_days and r["entries"] == len(rel_list):
+            ok(f"同一天的 {len(rel_list)} 个版本合并为 {want_days} 个日期节点（合并生效）")
         else:
-            no(f"同日合并异常：节点 {r['days']} 个 / 条目 {r['entries']} 个（期望 1 / 3）")
+            no(f"同日合并异常：节点 {r['days']} 个 / 条目 {r['entries']} 个"
+               f"（期望 {want_days} / {len(rel_list)}）")
 
         # I2 节点内按时刻倒序，且精确到分钟
-        want_times = ["11:45", "10:20", "10:01"]
         if r["times"] == want_times:
             ok(f"节点内按时刻倒序：{' > '.join(want_times)}（精确到分钟，非仅日期）")
         else:
             no(f"时刻顺序异常：{r['times']}（期望 {want_times}）")
 
         # I3 版本号与时刻同序（倒序展开）
-        want_vers = ["v1.1.0", "v1.0.1", "v1.0.0"]
         if r["vers"] == want_vers:
-            ok(f"版本号与时刻同序：{' > '.join(want_vers)}")
+            ok(f"版本号与时刻同序：{' > '.join(x or '?' for x in want_vers)}")
         else:
             no(f"版本号顺序异常：{r['vers']}（期望 {want_vers}）")
 
         # I4 「最新」徽标唯一且指向时刻最大的那条
-        if r["nows"] == 1 and r["nowVer"] == "v1.1.0":
-            ok("「最新」徽标唯一，且落在 11:45 的 v1.1.0 上")
+        if r["nows"] == 1 and r["nowVer"] == want_newest_ver:
+            ok(f"「最新」徽标唯一，且落在 {want_newest_time} 的 {want_newest_ver} 上")
         else:
-            no(f"最新徽标异常：数量 {r['nows']} / 指向 {r['nowVer']!r}")
+            no(f"最新徽标异常：数量 {r['nows']} / 指向 {r['nowVer']!r}"
+               f"（期望 1 / {want_newest_ver!r}）")
 
         # I5 顶部统计与页脚口径一致
-        if r["cur"] == "v1.1.0" and "3" in (r["total"] or "") and (r["footTotal"] or "").strip() == "3":
+        if r["cur"] == want_newest_ver and str(len(rel_list)) in (r["total"] or "") \
+                and (r["footTotal"] or "").strip() == str(len(rel_list)):
             ok(f"统计一致：当前 {r['cur']} / 总数 {r['total']} / 页脚 {r['footTotal']}")
         else:
             no(f"统计异常：当前 {r['cur']!r} 总数 {r['total']!r} 页脚 {r['footTotal']!r}")

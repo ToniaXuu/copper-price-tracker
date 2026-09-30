@@ -130,6 +130,10 @@
       --radius: 18px;
       --radius-sm: 10px;
       --transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      /* 独立成段的 .section-title.sec-head 上方留白（与 index.html 逐值一致，
+         由 verify_static.py 的 check_token_parity() 兜底）。
+         用令牌而非字面量：桌面 52px / 移动端收窄，改一处即可全站生效。 */
+      --sec-head-gap: 52px;
 
       /* ---- 图表（由 JS 读取，CSS 是唯一真源）---- */
       --chart-axis-label: #78716c;
@@ -270,7 +274,12 @@
       -webkit-backdrop-filter: blur(14px) saturate(1.5);
       backdrop-filter: blur(14px) saturate(1.5);
       border-bottom: 1px solid var(--border);
+      transition: box-shadow .25s ease;
     }
+    .rel-head.stuck { box-shadow: 0 6px 22px rgba(60,40,20,.10); }
+    /* 页头吸顶后，fixed 的主题切换器（z-index 1000）会压在它右上角。
+       用 :has() 反向选择前置兄弟，把它下移到页头之下让位。 */
+    body:has(.rel-head.stuck) .theme-switch { top: 62px; }
     .rel-head-inner {
       max-width: 1160px; margin: 0 auto;
       padding: 10px 20px;
@@ -558,6 +567,9 @@
        RESPONSIVE —— 与首页同两档：768（平板） / 640（手机）
        ================================================================ */
     @media (max-width: 640px) {
+      /* 与 index.html 保持一致：窄屏收窄独立标题上方留白。
+         ⚠️ 必须用 :root 而非 html —— html 特异性(0,0,1)打不过主令牌层的 :root(0,1,0)，会静默失效。 */
+      :root { --sec-head-gap: 34px; }
       .rel-hero { padding: 38px 16px 34px; }
       .rel-hero h1 { font-size: 23px; }
       .rel-hero p { font-size: 13.5px; margin-bottom: 22px; }
@@ -1036,12 +1048,16 @@ applyTheme(_themeMode, false);
 
 // ============ 回到顶部 ============
 const backTopEl = document.getElementById('backTop');
+const relHeadEl = document.querySelector('.rel-head');
 let _scrollPending = false;
 window.addEventListener('scroll', () => {
   if (_scrollPending) return;
   _scrollPending = true;
   requestAnimationFrame(() => {
     backTopEl.classList.toggle('visible', window.scrollY > 480);
+    // sticky 吸附后到视口顶部的距离为 0。用于给 fixed 的主题切换器让位，
+    // 否则两者都在右上角、切换器 z-index 更高会压在页头之上。
+    if (relHeadEl) relHeadEl.classList.toggle('stuck', relHeadEl.getBoundingClientRect().top <= 1);
     _scrollPending = false;
   });
 }, { passive: true });

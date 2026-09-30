@@ -330,9 +330,15 @@ def extract_vars(html: str) -> dict[str, set[str]]:
 
     刻意不扫全文档：组件局部变量（如 .impact-card 的 --ic-accent）随组件存在，
     不属于两页共享的皮肤，把它们的缺失当成漂移是误报。
+
+    ⚠️ 正则必须锚定选择器结尾（``:root`` 后直接跟 ``{`` 或属性选择器再跟 ``{``），
+    不能用宽松的 ``:root[^{]*\\{`` —— 后者里的 ``[^{]*`` 不排除 ``}``，
+    会从一个 ``:root`` 块闭合后继续跨过大量 CSS，偶然吞掉后面 ``@media`` 里的
+    覆盖块（实测：index.html 因双 ``}}`` 结构把窄屏 ``html{--sec-head-gap:34px}``
+    误当成令牌层声明，releases.html 因结构不同没吞到 → 两页报「取值不一致」假失败）。
     """
     out: dict[str, set[str]] = {}
-    for block in re.findall(r":root[^{]*\{([^}]*)\}", html):
+    for block in re.findall(r":root(?:\[[^\]]*\])?\s*\{([^{}]*)\}", html):
         for m in re.finditer(r"(--[\w-]+)\s*:\s*([^;{}]+);", block):
             out.setdefault(m.group(1), set()).add(" ".join(m.group(2).split()))
     return out

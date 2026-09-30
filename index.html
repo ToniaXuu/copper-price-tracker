@@ -148,6 +148,9 @@
       --radius: 18px;
       --radius-sm: 10px;
       --transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      /* 独立成段的 .section-title.sec-head 上方留白（区别于 .card 内的标题）。
+         用令牌而非字面量：桌面 52px / 移动端收窄，改一处即可全站生效。 */
+      --sec-head-gap: 52px;
 
       /* ---- 图表（由 JS 读取，CSS 是唯一真源）---- */
       --chart-axis-label: #78716c;
@@ -377,6 +380,10 @@
       letter-spacing: -.01em;
       flex-wrap: wrap;
     }
+    /* 独立成段的标题（前后都是别的区块）需要上方留白，
+       否则会紧贴上一块内容的底部。card 内的标题（如历史数据表卡头）不需要。
+       用令牌统一 —— 否则桌面改了容易忘了手机（本坑已踩）。 */
+    .section-title.sec-head { margin-top: var(--sec-head-gap); }
     .section-title .ic { color: var(--ser-futures); }
     .title-tag {
       font-size: 11px; font-weight: 700;
@@ -838,6 +845,7 @@
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
       gap: 20px;
+      margin-bottom: 28px;
     }
     .impact-card {
       --ic-accent: var(--ser-futures);
@@ -1025,6 +1033,11 @@
       transition: box-shadow .25s ease;
     }
     .page-nav.stuck { box-shadow: 0 6px 22px rgba(60,40,20,.10); }
+    /* 导航吸顶后，fixed 的主题切换器会与导航条右上角重叠（两者都在 top:0 附近，
+       切换器 z-index 1000 > 导航 900）。给它让位，下移到导航条之下。
+       用 :has() 是因为 .theme-switch 是 .page-nav 的前置兄弟，无法用 ~ 反向选择。 */
+    body:has(.page-nav.stuck) .theme-switch { top: 58px; }
+    body:has(.page-nav.stuck) .back-top { bottom: 18px; }
     .pn-inner {
       max-width: 1160px; margin: 0 auto;
       padding: 9px 20px;
@@ -1071,6 +1084,10 @@
       .data-table tbody td { padding: 8px 8px; }
     }
     @media (max-width: 640px) {
+      /* 独立标题的上方留白同步收窄 —— 桌面 52px 在手机上会把区块推得过散。
+         ⚠️ 必须用 :root（特异性 0,1,0）而非 html（0,0,1）—— 后者打不过主令牌层的
+         :root 声明，实测写了 html 完全不生效、量出来还是 52px。 */
+      :root { --sec-head-gap: 34px; }
       .hero { padding: 52px 16px 44px; min-height: auto; }
       .hero h1 { font-size: 25px; }
       .hero-stats { gap: 10px; }
@@ -1668,7 +1685,7 @@
   </div>
 
   <!-- ========== 对业务的影响 ========== -->
-  <div class="section-title reveal" id="sec-impact"><svg class="ic" aria-hidden="true"><use href="#i-factory" /></svg>铜价波动的实际影响</div>
+  <div class="section-title reveal sec-head" id="sec-impact"><svg class="ic" aria-hidden="true"><use href="#i-factory" /></svg>铜价波动的实际影响</div>
   <div class="impact-grid">
     <div class="impact-card n1 reveal">
       <div class="ic-icon"><svg class="ic" aria-hidden="true"><use href="#i-cable" /></svg></div>
